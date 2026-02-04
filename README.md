@@ -44,6 +44,10 @@ mvn spring-boot:run
 
 A API estará disponível em `http://localhost:8080`.
 
+**Autenticação (Users Seed):**
+*   **Dev:** `dev@local` / `password`
+*   **Ops:** `ops@local` / `password`
+
 ### 3. Rodar Frontend React (Dev Portal)
 
 ```bash
