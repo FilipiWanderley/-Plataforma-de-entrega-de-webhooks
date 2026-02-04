@@ -4,7 +4,7 @@ Monorepo contendo a plataforma de entrega de webhooks.
 
 ## Estrutura do Projeto
 
-*   `/backend`: Aplicação Spring Boot (Java 17)
+*   `/backend`: Aplicação Spring Boot (Java 21)
 *   `/frontend-react`: Developer Portal (React + Vite)
 *   `/frontend-angular`: Ops Console (Angular)
 *   `/infra`: Configurações de infraestrutura (Docker Compose, OpenTelemetry)
@@ -12,7 +12,7 @@ Monorepo contendo a plataforma de entrega de webhooks.
 ## Pré-requisitos
 
 *   Docker & Docker Compose
-*   Java 17+
+*   Java 21+
 *   Node.js 18+ & NPM
 *   Maven (opcional, pode usar `./mvnw` se gerado, mas aqui assumimos `mvn` instalado ou IDE)
 
