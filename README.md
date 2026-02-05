@@ -140,6 +140,28 @@ npm start
 
 Acesse em `http://localhost:4200`.
 
+### 5. Mock Receiver (Para Testes de Webhook)
+
+Serviço leve em Node.js para receber webhooks, simular status (200, 429, 500, timeouts) e validar assinaturas.
+
+```bash
+cd mock-receiver
+npm install
+npm start
+```
+
+Rodando na porta `3001`.
+
+*   **POST** `http://localhost:3001/webhook/{status}?timeout={ms}`
+    *   Exemplo: `/webhook/200` (Sucesso)
+    *   Exemplo: `/webhook/500` (Erro interno)
+    *   Exemplo: `/webhook/429` (Too Many Requests)
+    *   Exemplo: `/webhook/200?timeout=5000` (Delay de 5s)
+*   **GET** `http://localhost:3001/requests`
+    *   Lista as últimas requisições recebidas (Headers e Body) para você validar o HMAC manualmente.
+*   **DELETE** `http://localhost:3001/requests`
+    *   Limpa o histórico.
+
 ## Componentes Internos
 
 ### Outbox Dispatcher
