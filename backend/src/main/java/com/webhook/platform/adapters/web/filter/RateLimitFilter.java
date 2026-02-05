@@ -31,6 +31,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         if (authentication != null && authentication.getPrincipal() instanceof User) {
             User user = (User) authentication.getPrincipal();
+            // Tenant-level isolation ensures one noisy tenant cannot starve others.
             Bucket bucket = rateLimitService.resolveBucket(user.getTenantId());
             ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
 

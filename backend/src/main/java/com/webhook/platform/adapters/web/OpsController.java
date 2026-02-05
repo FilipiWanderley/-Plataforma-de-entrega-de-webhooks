@@ -21,10 +21,10 @@ public class OpsController {
     @PreAuthorize("hasRole('OPS')")
     public ResponseEntity<DashboardMetrics> getMetrics() {
         long pending = jobRepository.countByStatus(DeliveryStatus.PENDING);
-        long success = jobRepository.countByStatus(DeliveryStatus.SUCCESS);
+        long success = jobRepository.countByStatus(DeliveryStatus.SUCCEEDED);
         long failed = jobRepository.countByStatus(DeliveryStatus.FAILED);
         long dlq = jobRepository.countByStatus(DeliveryStatus.DLQ);
-        long processing = jobRepository.countByStatus(DeliveryStatus.PROCESSING);
+        long processing = jobRepository.countByStatus(DeliveryStatus.IN_PROGRESS);
 
         return ResponseEntity.ok(new DashboardMetrics(pending, success, failed, dlq, processing));
     }

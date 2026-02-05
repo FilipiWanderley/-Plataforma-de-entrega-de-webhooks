@@ -1,14 +1,14 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './contexts/AuthContext';
-import { ToastProvider } from './contexts/ToastContext';
-import Layout from './components/layout/Layout';
-import Login from './pages/Login';
-import EndpointList from './pages/EndpointList';
-import EndpointForm from './pages/EndpointForm';
-import DeliveryList from './pages/DeliveryList';
-import DeliveryDetail from './pages/DeliveryDetail';
-import TestEvent from './pages/TestEvent';
+import { useAuth } from './app/providers/AuthContext';
+import { ToastProvider } from './app/providers/ToastContext';
+import Layout from './app/Layout';
+import Login from './features/auth/Login';
+import EndpointList from './features/endpoint/EndpointList';
+import EndpointForm from './features/endpoint/EndpointForm';
+import DeliveryList from './features/delivery/DeliveryList';
+import DeliveryDetail from './features/delivery/DeliveryDetail';
+import TestEvent from './features/testing/TestEvent';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();

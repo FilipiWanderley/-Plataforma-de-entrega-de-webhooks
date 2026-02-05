@@ -12,57 +12,37 @@ public class RetryPolicy {
     private static final double JITTER_FACTOR = 0.2; // 20% jitter
 
     public boolean canRetry(Integer httpStatus, Throwable error) {
+        // Network errors are inherently transient.
         if (error != null) {
-            // Network errors, timeouts, etc. are usually retryable
             return true;
         }
 
         if (httpStatus == null) {
-            return true; // Should not happen if error is null, but safe default
-        }
-
-        // 429 Too Many Requests -> Retry
-        if (httpStatus == 429) {
             return true;
         }
 
-        // 5xx Server Errors -> Retry
-        if (httpStatus >= 500) {
+        // Retry on Rate Limits (429) and Server Errors (5xx).
+        if (httpStatus == 429 || httpStatus >= 500) {
             return true;
         }
 
-        // 404 Not Found / 410 Gone -> Fail immediately
-        if (httpStatus == 404 || httpStatus == 410) {
-            return false;
-        }
-
-        // Other 4xx -> Default to no retry (Client Error)
-        if (httpStatus >= 400 && httpStatus < 500) {
-            return false;
-        }
-
-        // Default case (should be covered above, but for safety)
+        // Fail fast on Client Errors (4xx) except 429.
         return false;
     }
 
     public long calculateDelaySeconds(int attempt) {
-        // Exponential Backoff: 2^attempt
+        // Exponential Backoff with Jitter to prevent Thundering Herd.
         double delay = BASE_DELAY_SECONDS * Math.pow(2, attempt);
 
-        // Apply Cap
         if (delay > MAX_DELAY_SECONDS) {
             delay = MAX_DELAY_SECONDS;
         }
 
-        // Apply Jitter: Randomize between delay * (1 - JITTER) and delay * (1 + JITTER)
-        // Or simple additive jitter: delay + random(0, delay * JITTER)
-        // Using multiplicative jitter for better spread
+        // Multiplicative jitter provides better spread than additive.
         double jitterRange = delay * JITTER_FACTOR;
         double jitter = ThreadLocalRandom.current().nextDouble(-jitterRange, jitterRange);
         
-        long finalDelay = (long) (delay + jitter);
-        
-        return Math.max(1, finalDelay); // Ensure at least 1 second
+        return Math.max(1, (long) (delay + jitter));
     }
 
     public String determineErrorType(Integer httpStatus, Throwable error) {

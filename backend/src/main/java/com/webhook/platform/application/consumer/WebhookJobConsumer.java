@@ -23,9 +23,7 @@ public class WebhookJobConsumer {
             deliveryService.retryJob(jobId);
         } catch (Exception e) {
             log.error("Error processing retry job {}", jobId, e);
-            // If error persists, it might loop if we don't handle it.
-            // But executeDelivery handles its own errors and updates job status.
-            // Exceptions here would be DB connection errors, etc.
+            // Uncaught exceptions will trigger RabbitMQ's default retry/DLQ behavior.
         }
     }
 }

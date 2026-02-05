@@ -1,11 +1,11 @@
 import { Routes } from '@angular/router';
-import { LoginComponent } from './pages/login/login.component';
-import { DashboardComponent } from './pages/dashboard/dashboard.component';
-import { DlqComponent } from './pages/dlq/dlq.component';
-import { DlqDetailComponent } from './pages/dlq-detail/dlq-detail.component';
-import { EndpointsComponent } from './pages/endpoints/endpoints.component';
-import { MainLayoutComponent } from './layout/main-layout/main-layout.component';
-import { authGuard } from './guards/auth.guard';
+import { LoginComponent } from './features/login/login.component';
+import { DashboardComponent } from './features/dashboard/dashboard.component';
+import { DlqComponent } from './features/dlq/dlq.component';
+import { DlqDetailComponent } from './features/dlq-detail/dlq-detail.component';
+import { EndpointsComponent } from './features/endpoints/endpoints.component';
+import { MainLayoutComponent } from './core/layout/main-layout/main-layout.component';
+import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },

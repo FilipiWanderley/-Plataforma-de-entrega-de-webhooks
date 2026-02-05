@@ -9,6 +9,8 @@ import java.util.Base64;
 
 public class HmacUtils {
 
+    // HMAC-SHA256 is the industry standard for webhook signatures (e.g., Stripe, GitHub).
+    // It ensures payload integrity and authenticity without exposing the secret key.
     private static final String ALGORITHM = "HmacSHA256";
 
     public static String sign(String data, String secret) {

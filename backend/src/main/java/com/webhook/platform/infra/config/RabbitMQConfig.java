@@ -20,6 +20,7 @@ public class RabbitMQConfig {
 
     @Bean
     public TopicExchange exchange() {
+        // Topic Exchange allows flexible routing based on wildcards (e.g., webhook.events.*).
         return new TopicExchange(EXCHANGE_NAME);
     }
 

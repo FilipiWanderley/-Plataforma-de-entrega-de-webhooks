@@ -24,7 +24,7 @@ public class OutboxDispatcher {
 
     private static final int BATCH_SIZE = 50;
 
-    @Scheduled(fixedDelay = 1000) // Poll every 1 second
+    @Scheduled(fixedDelay = 1000)
     @Transactional
     @Observed(name = "webhook.dispatcher.process", contextualName = "dispatch-outbox")
     public void processOutbox() {
@@ -40,21 +40,20 @@ public class OutboxDispatcher {
 
         for (OutboxEventEntity event : events) {
             try {
-                // Publish to RabbitMQ
                 rabbitTemplate.convertAndSend(
                         RabbitMQConfig.EXCHANGE_NAME,
                         RabbitMQConfig.ROUTING_KEY,
                         event
                 );
 
-                // Update status to ENQUEUED
                 event.setStatus(EventStatus.ENQUEUED);
                 repository.save(event);
                 
                 log.debug("Event {} enqueued successfully", event.getId());
             } catch (Exception e) {
+                // Transaction rollback ensures event remains PENDING for retry.
                 log.error("Failed to publish event {}. Transaction will rollback.", event.getId(), e);
-                throw e; // Force rollback so event stays PENDING and is retried next time
+                throw e;
             }
         }
     }

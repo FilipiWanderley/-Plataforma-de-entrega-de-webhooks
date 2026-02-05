@@ -58,7 +58,6 @@ public class WebhookDeliveryService {
     public void processEvent(OutboxEventEntity event) {
         log.info("Processing event {} for tenant {}", event.getId(), event.getTenantId());
 
-        // 1. Resolve Active Endpoints
         List<WebhookEndpointEntity> endpoints = endpointRepository.findByTenantIdAndStatus(
                 event.getTenantId(), EndpointStatus.ACTIVE.name()
         );
@@ -68,34 +67,31 @@ public class WebhookDeliveryService {
             return;
         }
 
-        // 2. Process each endpoint
         for (WebhookEndpointEntity endpoint : endpoints) {
             processEndpointDelivery(event, endpoint);
         }
     }
 
     private void processEndpointDelivery(OutboxEventEntity event, WebhookEndpointEntity endpoint) {
-        // Idempotency Check
+        // Enforce Idempotency: Deduplication table prevents double-delivery from dispatcher retries.
         DeliveredDedupeId dedupeId = new DeliveredDedupeId(endpoint.getId(), event.getId());
         if (dedupeRepository.existsById(dedupeId)) {
             log.info("Event {} already delivered to endpoint {}", event.getId(), endpoint.getId());
             return;
         }
 
-        // Circuit Breaker Check
+        // Circuit Breaker: Fail fast if endpoint is unhealthy to protect system resources.
         if (endpoint.getNextAvailableAt() != null && endpoint.getNextAvailableAt().isAfter(LocalDateTime.now())) {
             log.warn("Endpoint {} is paused due to Circuit Breaker until {}", endpoint.getId(), endpoint.getNextAvailableAt());
-            // Create PENDING job scheduled for when CB opens
             createPendingJob(endpoint, event, endpoint.getNextAvailableAt());
             return;
         }
 
-        // Concurrency Limit Check
+        // Concurrency Control: Limit parallel requests per endpoint to avoid overwhelming the subscriber.
         long currentInProgress = jobRepository.countByEndpointIdAndStatus(endpoint.getId(), DeliveryStatus.IN_PROGRESS);
         if (currentInProgress >= endpoint.getConcurrencyLimit()) {
             log.info("Concurrency limit reached for endpoint {} ({}/{}). Scheduling for later.", 
                     endpoint.getId(), currentInProgress, endpoint.getConcurrencyLimit());
-            // Schedule with small delay (e.g. 10s) to back off
             createPendingJob(endpoint, event, LocalDateTime.now().plusSeconds(10));
             return;
         }
@@ -176,7 +172,6 @@ public class WebhookDeliveryService {
         } finally {
             long duration = System.currentTimeMillis() - start;
             
-            // Record Metrics
             Timer.builder("webhook.delivery.latency")
                     .tag("status", success ? "success" : "failure")
                     .tag("error", errorType != null ? errorType : "none")
@@ -189,7 +184,6 @@ public class WebhookDeliveryService {
                 meterRegistry.counter("webhook.delivery.failure", "reason", errorType).increment();
             }
 
-            // Record Attempt
             DeliveryAttemptEntity attempt = DeliveryAttemptEntity.builder()
                     .deliveryJobId(job.getId())
                     .attemptNo(attemptNo)
@@ -200,9 +194,8 @@ public class WebhookDeliveryService {
                     .build();
             attemptRepository.save(attempt);
 
-            // Update Job Status
             if (success) {
-                // Reset Circuit Breaker on success
+                // Reset Circuit Breaker on success to restore normal traffic flow.
                 if (endpoint.getConsecutiveFailures() > 0) {
                     endpoint.setConsecutiveFailures(0);
                     endpoint.setNextAvailableAt(null);
@@ -213,7 +206,6 @@ public class WebhookDeliveryService {
                 job.setStatus(DeliveryStatus.SUCCEEDED);
                 jobRepository.save(job);
                 
-                // Save Dedupe
                 DeliveredDedupeEntity dedupe = DeliveredDedupeEntity.builder()
                         .id(new DeliveredDedupeId(endpoint.getId(), event.getId()))
                         .build();
@@ -278,8 +270,6 @@ public class WebhookDeliveryService {
         DeliveryJobEntity job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
 
-        // Sanity check: Should be IN_PROGRESS (marked by dispatcher) or PENDING
-        
         WebhookEndpointEntity endpoint = endpointRepository.findById(job.getEndpointId())
                 .orElseThrow(() -> new IllegalStateException("Endpoint not found for job " + jobId));
 
