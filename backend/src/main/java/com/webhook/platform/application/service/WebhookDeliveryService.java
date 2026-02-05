@@ -4,6 +4,7 @@ import com.webhook.platform.adapters.persistence.*;
 import com.webhook.platform.domain.model.DeliveryStatus;
 import com.webhook.platform.domain.model.EndpointStatus;
 import com.webhook.platform.domain.policy.RetryPolicy;
+import com.webhook.platform.domain.security.HmacUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -81,13 +82,19 @@ public class WebhookDeliveryService {
         Throwable exception = null;
 
         try {
+            long timestamp = System.currentTimeMillis();
+            String payload = event.getPayloadJson();
+            String signature = HmacUtils.sign(timestamp + "." + payload, endpoint.getSecret());
+
             ResponseEntity<String> response = restClient.post()
                     .uri(endpoint.getUrl())
                     .contentType(MediaType.APPLICATION_JSON)
                     .header("X-Webhook-Event", event.getEventType())
-                    .header("X-Webhook-ID", event.getId().toString())
-                    // TODO: Add HMAC signature here
-                    .body(event.getPayloadJson())
+                    .header("X-Webhook-Id", event.getId().toString())
+                    .header("X-Webhook-Timestamp", String.valueOf(timestamp))
+                    .header("X-Webhook-Signature", signature)
+                    .header("User-Agent", "WebhookPlatform/1.0")
+                    .body(payload)
                     .retrieve()
                     .toEntity(String.class);
 

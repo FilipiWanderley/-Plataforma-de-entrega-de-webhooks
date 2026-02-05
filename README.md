@@ -78,6 +78,21 @@ A política de retry foi aprimorada para garantir robustez e evitar sobrecarga:
     *   **Outros 4xx**: Por padrão não retentam.
 *   **Delay Cap**: O tempo máximo de espera é limitado a 24 horas.
 
+### Segurança e Assinatura (Webhook Signature)
+Para garantir que os webhooks recebidos pelo destino são autênticos e não foram adulterados, cada requisição é assinada utilizando HMAC-SHA256.
+
+Os seguintes headers são enviados:
+*   `X-Webhook-Id`: ID único do evento (UUID).
+*   `X-Webhook-Timestamp`: Timestamp (epoch millis) do momento do envio.
+*   `X-Webhook-Signature`: Assinatura HMAC-SHA256 da string `timestamp + "." + payload` usando o `secret` do endpoint.
+*   `User-Agent`: `WebhookPlatform/1.0`
+
+**Validação (Exemplo):**
+1. Receba o header `X-Webhook-Signature`, `X-Webhook-Timestamp` e o corpo da requisição (`rawBody`).
+2. Concatene: `signed_payload = timestamp + "." + rawBody`.
+3. Calcule o HMAC-SHA256 de `signed_payload` usando o seu `secret`.
+4. Compare o hash calculado com `X-Webhook-Signature`.
+
 ### 3. Rodar Frontend React (Dev Portal)
 
 ```bash

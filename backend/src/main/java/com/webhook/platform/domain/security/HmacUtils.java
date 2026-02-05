@@ -1,0 +1,26 @@
+package com.webhook.platform.domain.security;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
+
+public class HmacUtils {
+
+    private static final String ALGORITHM = "HmacSHA256";
+
+    public static String sign(String data, String secret) {
+        try {
+            Mac sha256_HMAC = Mac.getInstance(ALGORITHM);
+            SecretKeySpec secret_key = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), ALGORITHM);
+            sha256_HMAC.init(secret_key);
+
+            byte[] rawHmac = sha256_HMAC.doFinal(data.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(rawHmac);
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            throw new RuntimeException("Error calculating HMAC signature", e);
+        }
+    }
+}
