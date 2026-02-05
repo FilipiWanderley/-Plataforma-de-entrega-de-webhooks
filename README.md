@@ -9,6 +9,18 @@ Monorepo contendo a plataforma de entrega de webhooks.
 *   `/frontend-angular`: Ops Console (Angular)
 *   `/infra`: Configurações de infraestrutura (Docker Compose, OpenTelemetry)
 
+## Modelo de Dados (Postgres)
+
+O banco de dados é migrado via Flyway e inclui as seguintes tabelas principais:
+*   `tenants`: Clientes da plataforma.
+*   `users`: Usuários com acesso (DEV/OPS).
+*   `webhook_endpoints`: Destinos configurados pelos tenants.
+*   `outbox_events`: Eventos recebidos e persistidos para garantia de entrega.
+*   `delivery_jobs`: Controle do processo de entrega para cada endpoint.
+*   `delivery_attempts`: Histórico de tentativas HTTP.
+*   `dead_letters`: Mensagens que falharam após todas as tentativas.
+*   `delivered_dedupe`: Controle de idempotência para evitar duplicidade.
+
 ## Pré-requisitos
 
 *   Docker & Docker Compose
