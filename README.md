@@ -87,6 +87,14 @@ npm start
 
 Acesse em `http://localhost:4200`.
 
+## Componentes Internos
+
+### Outbox Dispatcher
+*   Job agendado que lê eventos `PENDING` da tabela `outbox_events`.
+*   Utiliza `SELECT FOR UPDATE SKIP LOCKED` para garantir que apenas uma instância processe cada evento.
+*   Publica no RabbitMQ (Exchange: `webhook.events.exchange`) e marca como `ENQUEUED`.
+*   Em caso de falha no publish, a transação é revertida e o evento será retentado.
+
 ## Variáveis de Ambiente
 
 As aplicações já vêm configuradas para rodar localmente com os defaults do docker-compose. Se precisar alterar:
