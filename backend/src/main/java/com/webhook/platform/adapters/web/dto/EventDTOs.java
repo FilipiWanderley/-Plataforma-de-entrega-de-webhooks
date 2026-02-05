@@ -16,6 +16,7 @@ public class EventDTOs {
         @NotBlank(message = "Event type is required")
         private String eventType;
 
+        @jakarta.validation.constraints.NotNull(message = "Payload is required")
         private Object payload;
     }
 

@@ -1,23 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
-    
-    <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <includeMdcKeyName>traceId</includeMdcKeyName>
-            <includeMdcKeyName>spanId</includeMdcKeyName>
-            <includeContext>false</includeContext>
-            <fieldNames>
-                <timestamp>timestamp</timestamp>
-                <message>message</message>
-                <logger>logger</logger>
-                <thread>thread</thread>
-                <level>level</level>
-            </fieldNames>
+            <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                <defaultMask>*****</defaultMask>
+                <path>secret</path>
+                <path>password</path>
+                <path>token</path>
+                <path>Authorization</path>
+                <path>payload.secret</path>
+            </jsonGeneratorDecorator>
         </encoder>
     </appender>
-    
+
     <root level="INFO">
-        <appender-ref ref="CONSOLE_JSON"/>
+        <appender-ref ref="JSON_CONSOLE"/>
     </root>
 </configuration>
