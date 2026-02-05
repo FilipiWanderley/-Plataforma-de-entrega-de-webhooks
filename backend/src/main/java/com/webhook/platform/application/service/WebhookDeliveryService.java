@@ -5,6 +5,9 @@ import com.webhook.platform.domain.model.DeliveryStatus;
 import com.webhook.platform.domain.model.EndpointStatus;
 import com.webhook.platform.domain.policy.RetryPolicy;
 import com.webhook.platform.domain.security.HmacUtils;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.observation.annotation.Observed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -14,6 +17,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +32,9 @@ public class WebhookDeliveryService {
     private final DeadLetterRepository deadLetterRepository;
     private final RetryPolicy retryPolicy;
     private final RestClient restClient = RestClient.create();
+    private final MeterRegistry meterRegistry;
 
+    @Observed(name = "webhook.delivery.process", contextualName = "process-event")
     public void processEvent(OutboxEventEntity event) {
         log.info("Processing event {} for tenant {}", event.getId(), event.getTenantId());
 
@@ -98,6 +104,7 @@ public class WebhookDeliveryService {
         jobRepository.save(job);
     }
 
+    @Observed(name = "webhook.delivery.attempt", contextualName = "execute-delivery")
     private void executeDelivery(DeliveryJobEntity job, WebhookEndpointEntity endpoint, OutboxEventEntity event) {
         long start = System.currentTimeMillis();
         int attemptNo = job.getAttemptCount() + 1;
@@ -148,6 +155,19 @@ public class WebhookDeliveryService {
             }
         } finally {
             long duration = System.currentTimeMillis() - start;
+            
+            // Record Metrics
+            Timer.builder("webhook.delivery.latency")
+                    .tag("status", success ? "success" : "failure")
+                    .tag("error", errorType != null ? errorType : "none")
+                    .register(meterRegistry)
+                    .record(duration, TimeUnit.MILLISECONDS);
+
+            if (success) {
+                meterRegistry.counter("webhook.delivery.success").increment();
+            } else {
+                meterRegistry.counter("webhook.delivery.failure", "reason", errorType).increment();
+            }
 
             // Record Attempt
             DeliveryAttemptEntity attempt = DeliveryAttemptEntity.builder()
@@ -196,6 +216,7 @@ public class WebhookDeliveryService {
             endpoint.setNextAvailableAt(pausedUntil);
             endpoint.setFailureReason("Circuit Breaker Open: " + failures + " consecutive failures. Last error: " + (httpStatus != null ? httpStatus : exception));
             log.error("Circuit Breaker OPEN for endpoint {}. Paused until {}", endpoint.getId(), pausedUntil);
+            meterRegistry.counter("webhook.circuit_breaker.open", "endpoint", endpoint.getId().toString()).increment();
         }
         endpointRepository.save(endpoint);
 
@@ -206,8 +227,11 @@ public class WebhookDeliveryService {
             log.warn("Job {} failed with non-retryable error (Status: {}, Error: {}). Marking as FAILED.", 
                     job.getId(), httpStatus, exception != null ? exception.getMessage() : "Unknown");
             jobRepository.save(job);
+            meterRegistry.counter("webhook.delivery.permanent_failure").increment();
             return;
         }
+
+        meterRegistry.counter("webhook.delivery.retry").increment();
 
         if (job.getAttemptCount() >= endpoint.getMaxAttempts()) {
             job.setStatus(DeliveryStatus.DLQ);
@@ -218,6 +242,7 @@ public class WebhookDeliveryService {
                     .reason("Max attempts reached: " + job.getAttemptCount() + ". Last error: " + (httpStatus != null ? httpStatus : exception))
                     .build();
             deadLetterRepository.save(deadLetter);
+            meterRegistry.counter("webhook.dlq.events").increment();
             
         } else {
             // Calculate Next Attempt with Policy

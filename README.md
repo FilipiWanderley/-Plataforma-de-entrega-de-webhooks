@@ -69,6 +69,24 @@ A API estará disponível em `http://localhost:8080`.
 *   `GET /dlq`: Listar jobs na DLQ (Ops Only)
 *   `POST /dlq/{id}/replay`: Reenviar job da DLQ (Ops Only)
 
+### Observabilidade (Metrics & Tracing)
+A plataforma expõe métricas e traces para monitoramento avançado:
+
+*   **Logs JSON**: Logs estruturados com `traceId` e `spanId` para correlação (Logback + Logstash Encoder).
+*   **Métricas (Micrometer/Prometheus)**:
+    *   `webhook.delivery.success`: Contador de entregas bem-sucedidas.
+    *   `webhook.delivery.failure`: Contador de falhas (tag `reason`).
+    *   `webhook.delivery.latency`: Histograma de latência das entregas.
+    *   `webhook.circuit_breaker.open`: Contador de aberturas de circuito.
+    *   `webhook.dlq.events`: Contador de mensagens movidas para DLQ.
+*   **Tracing (OpenTelemetry)**:
+    *   `ingest-event`: Span de recebimento do evento na API.
+    *   `dispatch-outbox`: Span de processamento do dispatcher.
+    *   `process-event`: Span de consumo da mensagem.
+    *   `execute-delivery`: Span da tentativa HTTP.
+
+Endpoint de Métricas: `GET /actuator/prometheus`
+
 ### Retry Policy
 A política de retry foi aprimorada para garantir robustez e evitar sobrecarga:
 *   **Exponential Backoff + Jitter**: O tempo de espera entre tentativas cresce exponencialmente (2^n) com um fator de aleatoriedade (Jitter) de 20% para evitar *thundering herd*.

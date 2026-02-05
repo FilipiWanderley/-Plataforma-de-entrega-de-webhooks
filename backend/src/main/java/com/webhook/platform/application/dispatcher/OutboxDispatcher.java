@@ -4,6 +4,7 @@ import com.webhook.platform.adapters.persistence.OutboxEventEntity;
 import com.webhook.platform.adapters.persistence.OutboxEventRepository;
 import com.webhook.platform.domain.model.EventStatus;
 import com.webhook.platform.infra.config.RabbitMQConfig;
+import io.micrometer.observation.annotation.Observed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -25,6 +26,7 @@ public class OutboxDispatcher {
 
     @Scheduled(fixedDelay = 1000) // Poll every 1 second
     @Transactional
+    @Observed(name = "webhook.dispatcher.process", contextualName = "dispatch-outbox")
     public void processOutbox() {
         List<OutboxEventEntity> events = repository.findBatchByStatusForUpdateSkipLocked(
                 EventStatus.PENDING.name(), BATCH_SIZE
