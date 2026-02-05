@@ -1,173 +1,245 @@
-# Webhook Delivery Platform
+# 🚀 Webhook Delivery Platform (Outbound Webhooks)
 
-> Enterprise-grade outbound webhook engine ensuring reliable, asynchronous event delivery with retries, replay capabilities, and comprehensive observability.
+**Production-grade, multi-tenant webhook delivery** with **Transactional Outbox**, **retry (backoff + jitter)**, **DLQ + replay**, **HMAC signing**, and **observability**, backed by **Dev Portal (React)** + **Ops Console (Angular)**.
 
-## Why This Exists
-Building reliable webhooks is deceptively complex. Naive implementations suffer from:
-- **Thundering Herds**: Retrying failures without backoff/jitter brings down customer servers.
-- **Data Loss**: In-memory queues lose events during restarts.
-- **Lack of Visibility**: "Fire and forget" leaves Ops blind to delivery failures.
-- **No Isolation**: One slow endpoint clogs the queue for all other tenants.
+**Developed by Filipi Wanderley.**
 
-This platform solves these production challenges with a robust, database-backed architecture designed for scale and correctness.
+---
 
-## Key Features
-- **Transactional Outbox**: 100% guarantee that ingested events reach the delivery queue.
-- **Smart Retries**: Exponential backoff with jitter to prevent synchronized retry storms.
-- **At-Least-Once Delivery**: Robust deduplication handling and delivery guarantees.
-- **Dead Letter Queue (DLQ)**: Failed events are captured for manual inspection and replay.
-- **Security First**: HMAC-SHA256 signing (Stripe-style) and per-tenant rate limiting.
-- **Concurrency Control**: Per-endpoint limits and circuit breakers to protect downstream targets.
-- **Observability**: OpenTelemetry tracing and Prometheus metrics built-in.
-- **Dual Consoles**: React-based Developer Portal and Angular-based Ops Dashboard.
+## 🏷️ Tech Stack (with versions)
 
-## Architecture Overview
+![](https://img.shields.io/badge/Java-17-informational)
+![](https://img.shields.io/badge/Spring%20Boot-3.2.2-informational)
+![](https://img.shields.io/badge/PostgreSQL-15-informational)
+![](https://img.shields.io/badge/Queue-RabbitMQ%203%20%7C%20Redis%207-informational)
+![](https://img.shields.io/badge/React-19-informational)
+![](https://img.shields.io/badge/MUI-7-informational)
+![](https://img.shields.io/badge/MUI%20DataGrid-8-informational)
+![](https://img.shields.io/badge/Angular-21-informational)
+![](https://img.shields.io/badge/Angular%20Material-21-informational)
+![](https://img.shields.io/badge/Node-24-informational)
 
-The system decouples event ingestion from delivery using the Outbox pattern.
+---
 
+## 🎯 Why this exists (real production problem)
+
+Outbound webhooks are deceptively simple until production:
+- ⚠️ Customer endpoints are unstable (**timeouts / 5xx / 429**) → retry storms 
+- 🔁 Retries can create **duplicates** → side effects & data corruption 
+- 🧯 Without **DLQ + replay**, ops can’t recover safely 
+- 🔎 Without metrics/tracing, incidents become guesswork 
+- 🧱 Without isolation/limits, one noisy endpoint degrades the whole platform 
+
+This repo implements reliability patterns commonly used in real SaaS webhook systems.
+
+---
+
+## ✅ Key features
+
+### Reliability
+- 🧾 **Transactional Outbox** for durable event recording
+- 🔁 **Retry policy**: exponential backoff + jitter (classified by failure type)
+- 🧯 **DLQ + replay** for safe recovery and auditability
+- 🧷 **Dedupe guard** per `(endpoint_id, event_id)` (**at-least-once** semantics)
+- 🧱 **Concurrency limits / endpoint protection** (prevents saturation)
+
+### Security
+- 🔐 **HMAC-SHA256 signing** per endpoint secret
+- 🧷 Standard headers: `X-Webhook-Id`, `X-Webhook-Timestamp`, `X-Webhook-Signature`
+
+### Operations & Observability
+- 📜 Attempts history (status, latency, partial response)
+- 📈 Metrics + tracing for incident response
+- 🖥️ Two UIs:
+  - **Dev Portal (React + MUI DataGrid)**: endpoints, deliveries, replay, test events
+  - **Ops Console (Angular + Material)**: DLQ triage, replay, endpoint control, dashboards
+
+---
+
+## 🧠 Architecture Overview
+
+### Delivery Flow
 ```mermaid
-graph LR
-    Client[Client System] -->|POST /events| API[Ingestion API]
-    API -->|Tx Commit| DB[(PostgreSQL)]
-    DB -->|Poll| Dispatcher[Outbox Dispatcher]
-    Dispatcher -->|Publish| RMQ[RabbitMQ]
-    RMQ -->|Consume| Worker[Delivery Worker]
-    Worker -->|HTTP POST| Endpoint[Target Endpoint]
-    Worker -.->|Fail| DLQ[Dead Letter Queue]
-    DLQ -.->|Replay| RMQ
+flowchart LR
+  P[Producer /events] --> DB[(PostgreSQL)]
+  DB -->|Transactional Outbox| D[Outbox Dispatcher]
+  D --> Q[(Queue)]
+  Q --> W[Delivery Worker]
+  W -->|HTTP POST + HMAC| C[Customer Endpoint]
+  W --> A[(Attempts)]
+  W -->|max attempts exceeded| L[(DLQ)]
+  L -->|Manual Replay| Q
 ```
 
-### Delivery Semantics
-- **Reliability**: At-least-once.
-- **Deduplication**: Consumers should use `Webhook-ID` header.
-- **Retry Policy**: Configurable max attempts (default: 5) with exponential backoff (2s, 4s, 8s...).
+Fallback diagram (if Mermaid is not rendered) 
+ Producer -> /events -> Postgres(outbox) -> Dispatcher -> Queue -> Worker -> Customer Endpoint 
+                                            |                          | 
+                                            v                          v 
+                                         Attempts                      DLQ -> Replay -> Queue 
 
-[View detailed Architecture & Design](./docs/ARCHITECTURE.md)
+### Delivery semantics (explicit)
 
-## Tech Stack
+✅ **At-least-once delivery**: an event may be delivered more than once in failure scenarios.
 
-### Backend
-- **Java 17** / **Spring Boot 3.2.2**
-- **PostgreSQL 15** (Primary Store + Outbox)
-- **RabbitMQ 3** (Message Broker)
-- **Redis 7** (Rate Limiting/Cache)
-- **Flyway** (Schema Migrations)
-- **Bucket4j 8.1** (Rate Limiting)
-- **Testcontainers** (Integration Testing)
+🧷 **Dedupe guard** prevents multiple successful deliveries for the same `(endpoint_id, event_id)`.
 
-### Frontend
-- **Developer Portal**: React 19, Vite 7, Material UI 7, DataGrid 8.
-- **Ops Console**: Angular 21, Angular Material 21, Standalone Components.
+📌 **Consumers should still implement idempotency.**
 
-### Observability
-- **OpenTelemetry** (Tracing)
-- **Micrometer** (Prometheus Metrics)
-- **OTEL Collector**
+---
 
-## Repository Structure
+## 🗂️ Repository structure
 
 ```
-├── backend/                # Spring Boot Application
-│   ├── src/main/java       # Clean Architecture (Domain, App, Adapters, Infra)
-│   └── src/test            # E2E Tests with Testcontainers
-├── frontend-react/         # Developer Portal (Customer Facing)
-│   ├── src/features        # Domain-driven React components
-│   └── src/lib             # API clients and utilities
-├── frontend-angular/       # Operations Console (Internal)
-│   ├── src/app/features    # Admin features (DLQ, Dashboard)
-│   └── src/app/core        # Guards, Interceptors
-├── infra/                  # Docker Compose & OTEL config
-└── docs/                   # Architecture & Project Documentation
+. 
+├─ backend/                          # Spring Boot backend (hexagonal-ish) 
+│  ├─ src/main/java/.../domain       # core domain 
+│  ├─ src/main/java/.../application  # use-cases, ports 
+│  ├─ src/main/java/.../adapters     # web + persistence + messaging adapters 
+│  ├─ src/main/java/.../infra        # config, schedulers, observability 
+│  └─ src/main/resources/ 
+│     ├─ db/migration                # Flyway migrations 
+│     └─ application-*.properties 
+├─ frontend-react/                   # Dev Portal (React + MUI + DataGrid) 
+│  ├─ src/app                        # providers, routing, app shell 
+│  ├─ src/features                   # feature modules (endpoints, deliveries) 
+│  ├─ src/ui                         # shared UI kit + DataGrid wrapper 
+│  ├─ src/lib                        # api client, utils 
+│  └─ src/styles                     # theme/tokens 
+├─ frontend-angular/                 # Ops Console (Angular + Material) 
+│  ├─ src/app/core                   # auth, interceptors, guards, api 
+│  ├─ src/app/shared                 # shared UI components 
+│  └─ src/app/features               # dlq, controls, dashboard 
+├─ infra/                            # docker-compose & local infra 
+└─ docs/                             # architecture notes + repo summaries 
 ```
 
-## Getting Started
+---
+
+## ⚙️ Getting Started (Local)
 
 ### Prerequisites
-- Java 17+
-- Node.js 20+
-- Docker & Docker Compose
 
-### Local Development
+🐳 **Docker + Docker Compose**
 
-1.  **Start Infrastructure**
-    ```bash
-    cd infra
-    docker-compose up -d
-    ```
-    *Services: Postgres (5432), RabbitMQ (5672/15672), Redis (6379), OTEL (4317/4318)*
+☕ **Java 17+**
 
-2.  **Run Backend**
-    ```bash
-    cd backend
-    ./mvnw spring-boot:run
-    ```
-    *API: http://localhost:8080*
+🟢 **Node 20+**
 
-3.  **Run Developer Portal (React)**
-    ```bash
-    cd frontend-react
-    npm install && npm run dev
-    ```
-    *URL: http://localhost:5173*
-
-4.  **Run Ops Console (Angular)**
-    ```bash
-    cd frontend-angular
-    npm install && npm start
-    ```
-    *URL: http://localhost:4200*
-
-### Environment Setup
-Copy `.env.example` to `.env` if you need to override defaults. The project comes pre-configured for local development with default ports.
-
-## API & Webhook Contract
-
-### Ingest Event
+### 1) Start infrastructure
 ```bash
-curl -X POST http://localhost:8080/events \
-  -H "Content-Type: application/json" \
-  -d '{
-    "eventType": "order.created",
-    "payload": { "id": "ord_123", "amount": 9900 }
-  }'
+cd infra
+docker compose up -d
 ```
 
-### Webhook Delivery Headers
-Your endpoint will receive POST requests with these headers:
+### 2) Run backend
+```bash
+cd backend
+./mvnw spring-boot:run
+```
 
-| Header | Description |
-|--------|-------------|
-| `Webhook-ID` | Unique UUID for the event delivery. |
-| `Webhook-Event` | The event type (e.g., `order.created`). |
-| `Webhook-Signature` | `t=1709...,v1=hmac_sha256_hash` |
+### 3) Run Dev Portal (React)
+```bash
+cd frontend-react
+npm ci
+npm run dev
+```
 
-**Verification Example:**
-Compute HMAC-SHA256 of `timestamp + "." + raw_body` using your secret key.
+### 4) Run Ops Console (Angular)
+```bash
+cd frontend-angular
+npm ci
+npm start
+```
 
-## Observability
+### Local URLs / Ports
 
-- **Metrics**: `http://localhost:8080/actuator/prometheus`
-- **Health**: `http://localhost:8080/actuator/health`
-- **Tracing**: Logs include `traceId` and `spanId` automatically injected by Micrometer Tracing.
+- **Backend**: http://localhost:8080
+- **Dev Portal**: http://localhost:5173
+- **Ops Console**: http://localhost:4200
 
-## Testing
+---
 
-- **Backend**:
-  ```bash
-  cd backend
-  ./mvnw test  # Runs unit + integration tests via Testcontainers
-  ```
-- **Frontend**:
-  ```bash
-  # React
-  cd frontend-react && npm run lint && npm run build
-  # Angular
-  cd frontend-angular && npm run build
-  ```
+## 🔌 Webhook contract (HMAC)
 
-## Roadmap
-- [ ] Multi-region active-active deployment support.
-- [ ] UI for rotating webhook signing secrets.
-- [ ] Advanced retry policies (custom backoff per endpoint).
-- [ ] WebSocket integration for real-time delivery logs.
-- [ ] Dead-letter analytics and trends.
+### Headers
+
+- `X-Webhook-Id`: event id
+- `X-Webhook-Timestamp`: unix timestamp (seconds)
+- `X-Webhook-Signature`: HMAC-SHA256
+
+### Signing input
+
+`timestamp + "." + rawBody`
+
+---
+
+## 🔁 Retry policy (high level)
+
+> Adjust to match your implemented policy.
+
+- ⏱️ **Timeout / network / 5xx** → retry
+- 🚦 **429** → retry (backoff; optional Retry-After)
+- 🧱 **404/410** → fail (no retry by default)
+- ⚠️ **other 4xx** → configurable (default: no retry)
+
+### Backoff:
+
+- **exponential + jitter**
+- max attempts per endpoint
+- delay cap
+
+---
+
+## 🧪 Testing
+
+### Backend:
+```bash
+cd backend
+./mvnw test
+```
+
+### React:
+```bash
+cd frontend-react
+npm run lint --if-present
+npm run test --if-present
+npm run build
+```
+
+### Angular:
+```bash
+cd frontend-angular
+npm run lint --if-present
+npm run test --if-present
+npm run build
+```
+
+---
+
+## 📈 Observability
+
+- **Structured logs** with correlation/trace context (when enabled)
+- **Metrics**: success/failure, retries, DLQ size, latency histograms
+- **Tracing**: ingest → outbox → enqueue → attempt → outcome
+
+---
+
+## 🖼️ Screenshots
+
+Add screenshots to `docs/screenshots/` (optional):
+
+- `dev-portal-endpoints.png`
+- `dev-portal-delivery-detail.png`
+- `ops-dlq-list.png`
+- `ops-dlq-detail.png`
+- `ops-dashboard.png`
+
+---
+
+## 🧭 Roadmap
+
+- [ ] Per-tenant rate limiting & quotas
+- [ ] Secret rotation UX + signature versioning
+- [ ] Failure analytics (clustering by reason/status)
+- [ ] Worker scaling strategy (partitioning / ordering where applicable)
+- [ ] Integration contract test kit
