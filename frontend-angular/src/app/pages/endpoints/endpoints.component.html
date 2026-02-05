@@ -1,0 +1,31 @@
+<div class="endpoints-container">
+  <h1>Endpoint Management</h1>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>URL</th>
+          <th>Status</th>
+          <th>Max Attempts</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let endpoint of endpoints">
+          <td>{{ endpoint.name }}</td>
+          <td>{{ endpoint.url }}</td>
+          <td>
+            <span [class]="'badge ' + endpoint.status.toLowerCase()">{{ endpoint.status }}</span>
+          </td>
+          <td>{{ endpoint.maxAttempts }}</td>
+          <td>
+            <button *ngIf="endpoint.status === 'ACTIVE'" (click)="blockEndpoint(endpoint.id)" class="btn btn-danger">Pause/Block</button>
+            <button *ngIf="endpoint.status !== 'ACTIVE'" (click)="activateEndpoint(endpoint.id)" class="btn btn-success">Activate</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

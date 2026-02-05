@@ -1,0 +1,50 @@
+<div class="dlq-container">
+  <h1>Dead Letter Queue (DLQ)</h1>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Endpoint</th>
+          <th>Attempts</th>
+          <th>Created At</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let job of jobs">
+          <td>{{ job.id }}</td>
+          <td>{{ job.endpointName || job.endpointId }}</td> <!-- Backend Entity might allow getting endpoint name if fetched eagerly, but likely just ID -->
+          <td>{{ job.attemptCount }}</td>
+          <td>{{ job.createdAt | date:'short' }}</td>
+          <td>
+            <button (click)="viewDetails(job.id)" class="btn btn-sm btn-info">Details</button>
+            <button (click)="replay(job.id)" class="btn btn-sm btn-warning">Replay</button>
+          </td>
+        </tr>
+        <tr *ngIf="selectedJobId" class="details-row">
+          <td colspan="5">
+             <div *ngIf="selectedJobId === selectedJobId" class="attempts-list">
+               <h4>Attempt History</h4>
+               <ul>
+                 <li *ngFor="let attempt of selectedJobAttempts" [class.success]="attempt.success" [class.failure]="!attempt.success">
+                   <span class="status-code">{{ attempt.httpStatus }}</span>
+                   <span class="duration">{{ attempt.durationMs }}ms</span>
+                   <span class="error">{{ attempt.errorType }}</span>
+                   <span class="time">{{ attempt.createdAt | date:'mediumTime' }}</span>
+                 </li>
+               </ul>
+             </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination">
+    <button (click)="prevPage()" [disabled]="page === 0">Previous</button>
+    <span>Page {{ page + 1 }} of {{ totalPages }}</span>
+    <button (click)="nextPage()" [disabled]="page >= totalPages - 1">Next</button>
+  </div>
+</div>

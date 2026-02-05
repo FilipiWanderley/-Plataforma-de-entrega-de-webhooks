@@ -1,0 +1,28 @@
+<div class="dashboard-container">
+  <h1>Operational Dashboard</h1>
+  
+  <div *ngIf="loading" class="loading">Loading metrics...</div>
+  
+  <div *ngIf="metrics" class="metrics-grid">
+    <div class="metric-card success">
+      <h3>Success</h3>
+      <div class="value">{{ metrics.totalSuccess }}</div>
+    </div>
+    <div class="metric-card pending">
+      <h3>Pending</h3>
+      <div class="value">{{ metrics.totalPending }}</div>
+    </div>
+    <div class="metric-card processing">
+      <h3>Processing</h3>
+      <div class="value">{{ metrics.totalProcessing }}</div>
+    </div>
+    <div class="metric-card failed">
+      <h3>Failed</h3>
+      <div class="value">{{ metrics.totalFailed }}</div>
+    </div>
+    <div class="metric-card dlq">
+      <h3>DLQ</h3>
+      <div class="value">{{ metrics.totalDlq }}</div>
+    </div>
+  </div>
+</div>

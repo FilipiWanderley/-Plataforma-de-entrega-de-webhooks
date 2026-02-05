@@ -49,6 +49,26 @@ npm run dev
 Acesse em: `http://localhost:5173`
 Credenciais de teste: `dev@local` / `password`
 
+## Frontend (Angular)
+
+Alternativa de frontend em Angular (v19+) focada em operações (OPS).
+
+**Funcionalidades:**
+* Login OPS.
+* Dashboard Operacional (Métricas agregadas).
+* Monitoramento de DLQ (Lista, Detalhes, Replay).
+* Controle de Endpoints (Pausar/Bloquear/Ativar).
+
+**Como rodar:**
+```bash
+cd frontend-angular
+npm install
+npm start
+```
+
+Acesse em: `http://localhost:4200`
+Credenciais OPS: `ops@webhook.com` / `password` (Certifique-se de criar este usuário com role OPS no banco se não existir, ou use `dev@local` se ele tiver permissão)
+
 ## Testes End-to-End (E2E)
 
 O projeto utiliza **Testcontainers** para testes de integração reais com Postgres e RabbitMQ, garantindo que o fluxo completo (API -> Banco -> Fila -> Worker -> Http) funcione corretamente.

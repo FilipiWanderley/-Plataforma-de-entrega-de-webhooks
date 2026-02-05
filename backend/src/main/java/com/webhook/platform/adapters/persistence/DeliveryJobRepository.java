@@ -23,4 +23,6 @@ public interface DeliveryJobRepository extends JpaRepository<DeliveryJobEntity, 
     Page<DeliveryJobEntity> findByEndpointTenantId(UUID tenantId, Pageable pageable);
 
     Page<DeliveryJobEntity> findByEndpointTenantIdAndStatus(UUID tenantId, DeliveryStatus status, Pageable pageable);
+
+    long countByStatus(DeliveryStatus status);
 }
