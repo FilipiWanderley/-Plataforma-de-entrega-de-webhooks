@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client';
-import { Link as RouterLink } from 'react-router-dom';
-import { Plus, Edit } from 'lucide-react';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Plus, MoreVertical, Send, Eye, Edit as EditIcon, Trash2 } from 'lucide-react';
 import { 
   Box, 
   Table, 
@@ -10,24 +10,43 @@ import {
   TableContainer, 
   TableHead, 
   TableRow, 
-  Paper, 
-  IconButton
+  IconButton,
+  Button,
+  TextField,
+  MenuItem,
+  Stack,
+  Menu,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import PageHeader from '../components/common/PageHeader';
 import CardSection from '../components/common/CardSection';
 import { LoadingSkeleton, EmptyState, ErrorState } from '../components/common/DataState';
 import StatusChip from '../components/common/StatusChip';
+import TestEventDialog from '../components/common/TestEventDialog';
 import { useToast } from '../contexts/ToastContext';
 
 const EndpointList = () => {
   const [endpoints, setEndpoints] = useState([]);
+  const [filteredEndpoints, setFilteredEndpoints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [selectedEndpoint, setSelectedEndpoint] = useState(null);
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
+  
   const { error: toastError } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchEndpoints();
   }, []);
+
+  useEffect(() => {
+    filterEndpoints();
+  }, [search, statusFilter, endpoints]);
 
   const fetchEndpoints = async () => {
     setLoading(true);
@@ -44,15 +63,56 @@ const EndpointList = () => {
     }
   };
 
+  const filterEndpoints = () => {
+    let result = endpoints;
+    
+    if (search) {
+      const lowerSearch = search.toLowerCase();
+      result = result.filter(e => 
+        (e.name || '').toLowerCase().includes(lowerSearch) || 
+        (e.description || '').toLowerCase().includes(lowerSearch) ||
+        (e.url || '').toLowerCase().includes(lowerSearch)
+      );
+    }
+
+    if (statusFilter !== 'ALL') {
+      result = result.filter(e => e.status === statusFilter);
+    }
+
+    setFilteredEndpoints(result);
+  };
+
+  const handleMenuOpen = (event, endpoint) => {
+    setAnchorEl(event.currentTarget);
+    setSelectedEndpoint(endpoint);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setSelectedEndpoint(null);
+  };
+
+  const handleAction = (action) => {
+    if (!selectedEndpoint) return;
+    
+    switch (action) {
+      case 'edit':
+        navigate(`/endpoints/${selectedEndpoint.id}/edit`);
+        break;
+      case 'deliveries':
+        navigate(`/deliveries?endpointId=${selectedEndpoint.id}`); // Assuming DeliveryList supports this
+        break;
+      // Add delete or other actions here
+    }
+    handleMenuClose();
+  };
+
   if (loading) {
     return (
       <Box>
         <PageHeader 
           title="Endpoints" 
           subtitle="Manage your webhook endpoints"
-          actionLabel="New Endpoint"
-          actionIcon={<Plus size={20} />}
-          onAction={() => {}} // Placeholder or disabled
         />
         <CardSection>
           <LoadingSkeleton rows={5} />
@@ -78,38 +138,72 @@ const EndpointList = () => {
         title="Endpoints" 
         subtitle="Manage your webhook endpoints"
         action={
-          <Button 
-            component={RouterLink} 
-            to="/endpoints/new" 
-            variant="contained" 
-            startIcon={<Plus size={20} />}
-            sx={{ borderRadius: 2, textTransform: 'none' }}
-          >
-            New Endpoint
-          </Button>
+          <Stack direction="row" spacing={2}>
+            <Button
+              variant="outlined"
+              startIcon={<Send size={18} />}
+              onClick={() => setTestDialogOpen(true)}
+              sx={{ borderRadius: 2, textTransform: 'none' }}
+            >
+              Test Event
+            </Button>
+            <Button 
+              component={RouterLink} 
+              to="/endpoints/new" 
+              variant="contained" 
+              startIcon={<Plus size={20} />}
+              sx={{ borderRadius: 2, textTransform: 'none' }}
+            >
+              New Endpoint
+            </Button>
+          </Stack>
         }
       />
 
       <CardSection noPadding>
+        <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <TextField
+              size="small"
+              placeholder="Search endpoints..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              sx={{ flexGrow: 1 }}
+            />
+            <TextField
+              select
+              size="small"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              sx={{ minWidth: 150 }}
+            >
+              <MenuItem value="ALL">All Status</MenuItem>
+              <MenuItem value="ACTIVE">Active</MenuItem>
+              <MenuItem value="PAUSED">Paused</MenuItem>
+              <MenuItem value="FAILED">Failed</MenuItem>
+            </TextField>
+          </Stack>
+        </Box>
+
         <TableContainer>
           <Table sx={{ minWidth: 650 }} aria-label="endpoints table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'background.default' }}>
-                <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Name / Description</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>URL</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Events</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Config</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }} align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {endpoints.length === 0 ? (
+              {filteredEndpoints.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} align="center">
                     <EmptyState 
-                      title="No endpoints found" 
-                      description="Get started by creating your first webhook endpoint."
-                      action={
+                      title={endpoints.length === 0 ? "No endpoints found" : "No matching endpoints"}
+                      description={endpoints.length === 0 ? "Get started by creating your first webhook endpoint." : "Try adjusting your filters."}
+                      action={endpoints.length === 0 && (
                         <Button 
                           component={RouterLink} 
                           to="/endpoints/new" 
@@ -120,32 +214,42 @@ const EndpointList = () => {
                         >
                           Create Endpoint
                         </Button>
-                      }
+                      )}
                     />
                   </TableCell>
                 </TableRow>
               ) : (
-                endpoints.map((endpoint) => (
+                filteredEndpoints.map((endpoint) => (
                   <TableRow
                     key={endpoint.id}
                     sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                    hover
                   >
                     <TableCell component="th" scope="row">
-                      {endpoint.description || 'No description'}
+                      <Box sx={{ fontWeight: 'medium' }}>{endpoint.name || endpoint.description || 'Unnamed'}</Box>
+                      {endpoint.description && endpoint.name && (
+                        <Box sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{endpoint.description}</Box>
+                      )}
                     </TableCell>
-                    <TableCell>{endpoint.url}</TableCell>
-                    <TableCell>{endpoint.eventTypes?.join(', ')}</TableCell>
+                    <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {endpoint.url}
+                    </TableCell>
                     <TableCell>
                       <StatusChip status={endpoint.status} />
                     </TableCell>
+                    <TableCell>
+                      <Box sx={{ fontSize: '0.875rem' }}>
+                        Timeout: {endpoint.timeoutMs}ms
+                        <br />
+                        Attempts: {endpoint.maxAttempts}
+                      </Box>
+                    </TableCell>
                     <TableCell align="right">
                       <IconButton 
-                        component={RouterLink} 
-                        to={`/endpoints/${endpoint.id}/edit`} 
                         size="small" 
-                        color="primary"
+                        onClick={(e) => handleMenuOpen(e, endpoint)}
                       >
-                        <Edit size={18} />
+                        <MoreVertical size={18} />
                       </IconButton>
                     </TableCell>
                   </TableRow>
@@ -155,11 +259,30 @@ const EndpointList = () => {
           </Table>
         </TableContainer>
       </CardSection>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        <MenuItem onClick={() => handleAction('edit')}>
+          <ListItemIcon><EditIcon size={18} /></ListItemIcon>
+          <ListItemText>Edit</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleAction('deliveries')}>
+          <ListItemIcon><Eye size={18} /></ListItemIcon>
+          <ListItemText>View Deliveries</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      <TestEventDialog 
+        open={testDialogOpen} 
+        onClose={() => setTestDialogOpen(false)} 
+      />
     </Box>
   );
 };
-
-// Missing import fix
-import { Button } from '@mui/material';
 
 export default EndpointList;

@@ -49,6 +49,11 @@ public class WebhookDeliveryService {
         return attemptRepository.findByDeliveryJobIdOrderByCreatedAtDesc(jobId);
     }
 
+    public DeliveryJobEntity getJob(UUID id) {
+        return jobRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Delivery Job not found with id: " + id));
+    }
+
     @Observed(name = "webhook.delivery.process", contextualName = "process-event")
     public void processEvent(OutboxEventEntity event) {
         log.info("Processing event {} for tenant {}", event.getId(), event.getTenantId());

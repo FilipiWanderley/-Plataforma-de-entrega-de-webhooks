@@ -1,8 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link as RouterLink } from 'react-router-dom';
 import api from '../api/client';
-import './EndpointForm.css';
+import { 
+  Box, 
+  Button, 
+  Grid, 
+  TextField, 
+  MenuItem, 
+  Typography,
+  InputAdornment,
+  IconButton
+} from '@mui/material';
+import { Save, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import PageHeader from '../components/common/PageHeader';
+import CardSection from '../components/common/CardSection';
+import { useToast } from '../contexts/ToastContext';
 
 const EndpointForm = () => {
   const { id } = useParams();
@@ -10,6 +23,8 @@ const EndpointForm = () => {
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(!!id);
+  const [showSecret, setShowSecret] = useState(false);
+  const { success, error: toastError } = useToast();
 
   useEffect(() => {
     if (id) {
@@ -19,23 +34,12 @@ const EndpointForm = () => {
 
   const fetchEndpoint = async () => {
     try {
-      const response = await api.get(`/endpoints/${id}`); // Assuming GET /endpoints/{id} exists? 
-      // Actually Controller usually has GET /endpoints/{id}?
-      // Let's check Controller. If not, we might need to filter from list or add it.
-      // Controller only has list, create, update, block. No GET /endpoints/{id}.
-      // So we have to fetch list and find it, or update backend.
-      // For now, I'll assume I can't fetch single, so I'll just use the update endpoint directly if I have data, 
-      // but to edit I need data.
-      // I will implement fetching from list for now since I can't change backend easily without verifying.
-      // Wait, Controller has @PutMapping("/{id}"), but no @GetMapping("/{id}").
-      // I should probably add GET /endpoints/{id} to backend if I want to be clean.
-      // Or I can just pass state via router or fetch list.
-      // I'll fetch list and filter.
-      const listResponse = await api.get('/endpoints');
-      const found = listResponse.data.content.find(e => e.id === id);
-      if (found) reset(found);
+      const response = await api.get(`/endpoints/${id}`);
+      reset(response.data);
     } catch (error) {
       console.error('Error fetching endpoint:', error);
+      toastError('Failed to load endpoint details');
+      navigate('/endpoints');
     } finally {
       setInitialLoading(false);
     }
@@ -44,99 +48,194 @@ const EndpointForm = () => {
   const onSubmit = async (data) => {
     setLoading(true);
     try {
+      // For update, only include secret if provided
+      if (id && !data.secret) {
+        delete data.secret;
+      }
+
       if (id) {
         await api.put(`/endpoints/${id}`, data);
+        success('Endpoint updated successfully');
       } else {
         await api.post('/endpoints', data);
+        success('Endpoint created successfully');
       }
       navigate('/endpoints');
     } catch (error) {
       console.error('Error saving endpoint:', error);
-      alert('Failed to save endpoint');
+      toastError('Failed to save endpoint');
     } finally {
       setLoading(false);
     }
   };
 
-  if (initialLoading) return <div>Loading...</div>;
+  if (initialLoading) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography>Loading...</Typography>
+      </Box>
+    );
+  }
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <h1>{id ? 'Edit Endpoint' : 'New Endpoint'}</h1>
-      </div>
-      <div className="form-container">
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <div className="form-group">
-            <label>Name (Description)</label>
-            <input 
-              {...register('name', { required: true })} 
-              placeholder="My Webhook"
-            />
-            {errors.name && <span>Name is required</span>}
-          </div>
+    <Box>
+      <PageHeader 
+        title={id ? 'Edit Endpoint' : 'New Endpoint'} 
+        subtitle={id ? 'Update endpoint configuration' : 'Configure a new webhook endpoint'}
+        action={
+          <Button 
+            component={RouterLink} 
+            to="/endpoints" 
+            startIcon={<ArrowLeft size={20} />}
+            sx={{ textTransform: 'none' }}
+          >
+            Back to List
+          </Button>
+        }
+      />
 
-          <div className="form-group">
-            <label>URL</label>
-            <input 
-              {...register('url', { required: true, pattern: /^https?:\/\/.+/ })} 
-              placeholder="https://api.example.com/webhook"
-            />
-            {errors.url && <span>Valid URL is required</span>}
-          </div>
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
+            <CardSection title="General Information">
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Name / Description"
+                    fullWidth
+                    placeholder="e.g. Order Created Webhook"
+                    {...register('name', { required: 'Name is required' })}
+                    error={!!errors.name}
+                    helperText={errors.name?.message}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Target URL"
+                    fullWidth
+                    placeholder="https://api.example.com/webhooks/orders"
+                    {...register('url', { 
+                      required: 'URL is required',
+                      pattern: {
+                        value: /^https?:\/\/.+/,
+                        message: 'Must be a valid URL starting with http:// or https://'
+                      }
+                    })}
+                    error={!!errors.url}
+                    helperText={errors.url?.message}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label={id ? "Signing Secret (Leave empty to keep current)" : "Signing Secret"}
+                    fullWidth
+                    type={showSecret ? "text" : "password"}
+                    placeholder="e.g. whsec_..."
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowSecret(!showSecret)}
+                            edge="end"
+                          >
+                            {showSecret ? <EyeOff size={20} /> : <Eye size={20} />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                    {...register('secret', { 
+                      required: !id && 'Secret is required' 
+                    })}
+                    error={!!errors.secret}
+                    helperText={errors.secret?.message || "Used to sign webhook payloads (HMAC-SHA256)"}
+                  />
+                </Grid>
+                {id && (
+                  <Grid item xs={12}>
+                    <TextField
+                      select
+                      label="Status"
+                      fullWidth
+                      defaultValue="ACTIVE"
+                      {...register('status')}
+                    >
+                      <MenuItem value="ACTIVE">Active</MenuItem>
+                      <MenuItem value="PAUSED">Paused</MenuItem>
+                    </TextField>
+                  </Grid>
+                )}
+              </Grid>
+            </CardSection>
+          </Grid>
 
-          <div className="form-group">
-            <label>Secret</label>
-            <input 
-              {...register('secret', { required: true })} 
-              placeholder="Signing Secret"
-            />
-            {errors.secret && <span>Secret is required</span>}
-          </div>
+          <Grid item xs={12} md={4}>
+            <CardSection title="Reliability Settings">
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Max Retries"
+                    type="number"
+                    fullWidth
+                    defaultValue={3}
+                    {...register('maxAttempts', { 
+                      required: 'Required', 
+                      min: { value: 1, message: 'Min 1' }, 
+                      max: { value: 20, message: 'Max 20' } 
+                    })}
+                    error={!!errors.maxAttempts}
+                    helperText={errors.maxAttempts?.message}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Timeout (ms)"
+                    type="number"
+                    fullWidth
+                    defaultValue={5000}
+                    {...register('timeoutMs', { 
+                      required: 'Required', 
+                      min: { value: 100, message: 'Min 100ms' }, 
+                      max: { value: 60000, message: 'Max 60s' } 
+                    })}
+                    error={!!errors.timeoutMs}
+                    helperText={errors.timeoutMs?.message}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Concurrency Limit"
+                    type="number"
+                    fullWidth
+                    defaultValue={5}
+                    {...register('concurrencyLimit', { 
+                      required: 'Required', 
+                      min: { value: 1, message: 'Min 1' }, 
+                      max: { value: 100, message: 'Max 100' } 
+                    })}
+                    error={!!errors.concurrencyLimit}
+                    helperText={errors.concurrencyLimit?.message || "Max concurrent requests"}
+                  />
+                </Grid>
+              </Grid>
+            </CardSection>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Max Attempts</label>
-              <input 
-                type="number"
-                {...register('maxAttempts', { required: true, min: 1, max: 20 })} 
-                defaultValue={3}
-              />
-              {errors.maxAttempts && <span>1-20</span>}
-            </div>
-
-            <div className="form-group">
-              <label>Timeout (ms)</label>
-              <input 
-                type="number"
-                {...register('timeoutMs', { required: true, min: 100, max: 60000 })} 
-                defaultValue={5000}
-              />
-              {errors.timeoutMs && <span>100-60000</span>}
-            </div>
-
-            <div className="form-group">
-              <label>Concurrency Limit</label>
-              <input 
-                type="number"
-                {...register('concurrencyLimit', { required: true, min: 1, max: 100 })} 
-                defaultValue={2}
-              />
-              {errors.concurrencyLimit && <span>1-100</span>}
-            </div>
-          </div>
-
-          <div className="form-actions">
-            <button type="button" onClick={() => navigate('/endpoints')} className="btn-secondary">
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Saving...' : 'Save'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+            <Box sx={{ mt: 3 }}>
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                size="large"
+                disabled={loading}
+                startIcon={<Save size={20} />}
+                sx={{ borderRadius: 2 }}
+              >
+                {loading ? 'Saving...' : 'Save Endpoint'}
+              </Button>
+            </Box>
+          </Grid>
+        </Grid>
+      </form>
+    </Box>
   );
 };
 

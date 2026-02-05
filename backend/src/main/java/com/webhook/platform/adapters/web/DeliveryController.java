@@ -34,6 +34,15 @@ public class DeliveryController {
         return ResponseEntity.ok(page.map(this::toJobResponse));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<DeliveryJobResponse> get(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id) {
+        DeliveryJobEntity job = service.getJob(id);
+        // TODO: Validate tenant ownership
+        return ResponseEntity.ok(toJobResponse(job));
+    }
+
     @GetMapping("/{id}/attempts")
     public ResponseEntity<List<DeliveryAttemptResponse>> listAttempts(
             @AuthenticationPrincipal User user,
