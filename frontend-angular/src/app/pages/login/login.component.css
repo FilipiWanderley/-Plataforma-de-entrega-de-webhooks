@@ -5,21 +5,36 @@
   height: 100vh;
   background-color: #f5f5f5;
 }
-mat-card {
+
+.login-card {
   width: 100%;
   max-width: 400px;
   padding: 16px;
 }
+
+mat-card-header {
+  margin-bottom: 24px;
+  justify-content: center;
+  text-align: center;
+}
+
 .full-width {
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: 16px;
 }
+
 .error-message {
   color: #f44336;
   margin-bottom: 16px;
   font-size: 14px;
+  text-align: center;
 }
-mat-card-title {
-  margin-bottom: 16px;
-  display: block;
+
+.actions {
+  margin-top: 16px;
+}
+
+button mat-spinner {
+  display: inline-block;
+  margin: 0 auto;
 }

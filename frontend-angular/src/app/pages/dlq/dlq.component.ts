@@ -1,93 +1,156 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { DeliveryJob, DeliveryAttempt } from '../../models';
+import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { MatTableModule, MatTableDataSource } from '@angular/material/table';
+import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
+import { MatSort, MatSortModule } from '@angular/material/sort';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { ClipboardModule } from '@angular/cdk/clipboard';
+import { SelectionModel } from '@angular/cdk/collections';
+import { RouterModule } from '@angular/router';
+import { DeliveryJob } from '../../models';
 
 @Component({
   selector: 'app-dlq',
   standalone: true,
-  imports: [CommonModule],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    MatTableModule,
+    MatPaginatorModule,
+    MatSortModule,
+    MatCheckboxModule,
+    MatButtonModule,
+    MatIconModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatProgressSpinnerModule,
+    MatSnackBarModule,
+    ClipboardModule,
+    RouterModule
+  ],
   templateUrl: './dlq.component.html',
   styleUrl: './dlq.component.css'
 })
 export class DlqComponent implements OnInit {
-  jobs: DeliveryJob[] = [];
-  selectedJobAttempts: DeliveryAttempt[] = [];
-  selectedJobId: string | null = null;
+  displayedColumns: string[] = ['select', 'id', 'endpointName', 'attemptCount', 'createdAt', 'actions'];
+  dataSource = new MatTableDataSource<DeliveryJob>([]);
+  selection = new SelectionModel<DeliveryJob>(true, []);
+  filterForm: FormGroup;
   loading = false;
-  
-  // Pagination
-  page = 0;
-  size = 20;
-  totalPages = 0;
+  totalElements = 0;
 
-  constructor(private http: HttpClient) {}
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
+  @ViewChild(MatSort) sort!: MatSort;
+
+  constructor(
+    private http: HttpClient,
+    private fb: FormBuilder,
+    private snackBar: MatSnackBar
+  ) {
+    this.filterForm = this.fb.group({
+      endpointId: [''],
+      dateFrom: [''],
+      dateTo: ['']
+    });
+  }
 
   ngOnInit() {
     this.loadJobs();
   }
 
+  ngAfterViewInit() {
+    this.dataSource.sort = this.sort;
+    this.paginator.page.subscribe(() => this.loadJobs());
+  }
+
   loadJobs() {
     this.loading = true;
-    this.http.get<any>(`http://localhost:8080/dlq?page=${this.page}&size=${this.size}`)
-      .subscribe({
-        next: (response) => {
-          this.jobs = response.content;
-          this.totalPages = response.totalPages;
-          this.loading = false;
-        },
-        error: (err) => {
-          console.error('Failed to load DLQ jobs', err);
-          this.loading = false;
-        }
-      });
+    const page = this.paginator ? this.paginator.pageIndex : 0;
+    const size = this.paginator ? this.paginator.pageSize : 20;
+    const filters = this.filterForm.value;
+
+    let url = `http://localhost:8080/dlq?page=${page}&size=${size}`;
+    if (filters.endpointId) url += `&endpointId=${filters.endpointId}`;
+    // Add other filters as query params if backend supports them
+
+    this.http.get<any>(url).subscribe({
+      next: (response) => {
+        this.dataSource.data = response.content;
+        this.totalElements = response.totalElements;
+        this.loading = false;
+        this.selection.clear();
+      },
+      error: (err) => {
+        console.error('Failed to load DLQ jobs', err);
+        this.loading = false;
+        this.snackBar.open('Failed to load DLQ jobs', 'Close', { duration: 3000 });
+      }
+    });
   }
 
-  viewDetails(jobId: string) {
-    if (this.selectedJobId === jobId) {
-      this.selectedJobId = null;
-      this.selectedJobAttempts = [];
+  applyFilter() {
+    if (this.paginator) {
+      this.paginator.firstPage();
+    }
+    this.loadJobs();
+  }
+
+  isAllSelected() {
+    const numSelected = this.selection.selected.length;
+    const numRows = this.dataSource.data.length;
+    return numSelected === numRows;
+  }
+
+  toggleAllRows() {
+    if (this.isAllSelected()) {
+      this.selection.clear();
       return;
     }
-    
-    this.selectedJobId = jobId;
-    this.http.get<DeliveryAttempt[]>(`http://localhost:8080/deliveries/${jobId}/attempts`)
-      .subscribe({
-        next: (data) => {
-          this.selectedJobAttempts = data;
-        },
-        error: (err) => console.error(err)
-      });
+
+    this.selection.select(...this.dataSource.data);
   }
 
-  replay(jobId: string) {
-    if (!confirm('Are you sure you want to replay this job?')) return;
+  replaySelected() {
+    if (this.selection.isEmpty()) return;
 
-    this.http.post(`http://localhost:8080/dlq/${jobId}/replay`, {})
-      .subscribe({
+    if (!confirm(`Replay ${this.selection.selected.length} jobs?`)) return;
+
+    const ids = this.selection.selected.map(job => job.id);
+    // Assuming backend supports bulk replay or loop
+    // For now, simple loop
+    let successCount = 0;
+    let failCount = 0;
+
+    ids.forEach(id => {
+      this.http.post(`http://localhost:8080/dlq/${id}/replay`, {}).subscribe({
         next: () => {
-          alert('Job requeued successfully');
-          this.loadJobs(); // Refresh list
-          this.selectedJobId = null;
+          successCount++;
+          if (successCount + failCount === ids.length) this.finishBulkAction(successCount, failCount);
         },
-        error: (err) => {
-          console.error('Replay failed', err);
-          alert('Replay failed');
+        error: () => {
+          failCount++;
+          if (successCount + failCount === ids.length) this.finishBulkAction(successCount, failCount);
         }
       });
+    });
   }
 
-  nextPage() {
-    if (this.page < this.totalPages - 1) {
-      this.page++;
-      this.loadJobs();
-    }
+  finishBulkAction(success: number, fail: number) {
+    this.snackBar.open(`Replayed: ${success}, Failed: ${fail}`, 'Close', { duration: 3000 });
+    this.loadJobs();
   }
 
-  prevPage() {
-    if (this.page > 0) {
-      this.page--;
-      this.loadJobs();
-    }
+  onCopied() {
+    this.snackBar.open('ID copied to clipboard', 'Close', { duration: 2000 });
   }
 }

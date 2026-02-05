@@ -1,54 +1,62 @@
 <div class="dashboard-container">
-  <h1>Operational Dashboard</h1>
+  <div class="header">
+    <h1>Operational Dashboard</h1>
+    <button mat-icon-button (click)="loadMetrics()" matTooltip="Refresh">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </div>
   
   <div *ngIf="loading" class="loading-container">
     <mat-spinner diameter="40"></mat-spinner>
-    <span>Loading metrics...</span>
+    <p>Loading metrics...</p>
   </div>
   
   <div *ngIf="metrics" class="metrics-grid">
-    <mat-card class="metric-card">
+    <!-- Success Rate -->
+    <mat-card class="metric-card success-card">
       <mat-card-header>
-        <mat-card-title class="success-text">Success</mat-card-title>
+        <mat-icon mat-card-avatar>check_circle</mat-icon>
+        <mat-card-title>Success Rate</mat-card-title>
       </mat-card-header>
       <mat-card-content>
-        <div class="value">{{ metrics.totalSuccess }}</div>
+        <div class="value">{{ successRate | number:'1.0-1' }}%</div>
+        <div class="sub-value">Total Success: {{ metrics.totalSuccess }}</div>
       </mat-card-content>
     </mat-card>
 
-    <mat-card class="metric-card">
+    <!-- DLQ Size -->
+    <mat-card class="metric-card dlq-card">
       <mat-card-header>
-        <mat-card-title class="pending-text">Pending</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="value">{{ metrics.totalPending }}</div>
-      </mat-card-content>
-    </mat-card>
-
-    <mat-card class="metric-card">
-      <mat-card-header>
-        <mat-card-title class="processing-text">Processing</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="value">{{ metrics.totalProcessing }}</div>
-      </mat-card-content>
-    </mat-card>
-
-    <mat-card class="metric-card">
-      <mat-card-header>
-        <mat-card-title class="failed-text">Failed</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="value">{{ metrics.totalFailed }}</div>
-      </mat-card-content>
-    </mat-card>
-
-    <mat-card class="metric-card">
-      <mat-card-header>
-        <mat-card-title class="dlq-text">DLQ</mat-card-title>
+        <mat-icon mat-card-avatar>error_outline</mat-icon>
+        <mat-card-title>DLQ Size</mat-card-title>
       </mat-card-header>
       <mat-card-content>
         <div class="value">{{ metrics.totalDlq }}</div>
+        <div class="sub-value">Action Required</div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Failed -->
+    <mat-card class="metric-card warn-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>warning</mat-icon>
+        <mat-card-title>Failed</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="value">{{ metrics.totalFailed }}</div>
+        <div class="sub-value">Perm. Failures</div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Pending/Processing -->
+    <mat-card class="metric-card info-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>schedule</mat-icon>
+        <mat-card-title>Processing</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="value">{{ metrics.totalProcessing + metrics.totalPending }}</div>
+        <div class="sub-value">Active Jobs</div>
       </mat-card-content>
     </mat-card>
   </div>

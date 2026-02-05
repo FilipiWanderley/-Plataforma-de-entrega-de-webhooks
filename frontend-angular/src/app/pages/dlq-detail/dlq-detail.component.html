@@ -1,0 +1,106 @@
+<div class="detail-container" *ngIf="job; else loadingTpl">
+  <!-- Header -->
+  <div class="header-actions">
+    <button mat-icon-button routerLink="/dlq">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+    <h1>DLQ Job Details</h1>
+    <span class="spacer"></span>
+    <button mat-raised-button color="primary" (click)="replay()">
+      <mat-icon>replay</mat-icon> Replay Job
+    </button>
+  </div>
+
+  <div class="content-grid">
+    <!-- Main Info -->
+    <mat-card class="info-card">
+      <mat-card-header>
+        <mat-card-title>Job Information</mat-card-title>
+        <mat-card-subtitle style="display: flex; align-items: center;">
+          ID: {{ job.id }}
+          <button mat-icon-button [cdkCopyToClipboard]="job.id" (cdkCopyToClipboardCopied)="onCopied('Job ID')" aria-label="Copy Job ID">
+            <mat-icon style="font-size: 16px; width: 16px; height: 16px;">content_copy</mat-icon>
+          </button>
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <mat-list>
+          <mat-list-item>
+            <span matListItemTitle>Status</span>
+            <span matListItemLine>
+              <mat-chip [color]="job.status === 'FAILED' ? 'warn' : 'accent'" highlighted>
+                {{ job.status }}
+              </mat-chip>
+            </span>
+          </mat-list-item>
+          <mat-list-item>
+            <span matListItemTitle>Endpoint</span>
+            <span matListItemLine>{{ job.endpointName || job.endpointId }}</span>
+          </mat-list-item>
+          <mat-list-item>
+            <span matListItemTitle>Created At</span>
+            <span matListItemLine>{{ job.createdAt | date:'medium' }}</span>
+          </mat-list-item>
+          <mat-list-item>
+            <span matListItemTitle>Attempts</span>
+            <span matListItemLine>{{ job.attemptCount }}</span>
+          </mat-list-item>
+        </mat-list>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Payload & Attempts -->
+    <mat-card class="details-card">
+      <mat-tab-group>
+        <mat-tab label="Payload">
+          <div class="payload-viewer">
+            <button mat-icon-button class="copy-payload-btn" [cdkCopyToClipboard]="payload" (cdkCopyToClipboardCopied)="onCopied('Payload')" aria-label="Copy Payload">
+              <mat-icon>content_copy</mat-icon>
+            </button>
+            <pre><code>{{ payload }}</code></pre>
+          </div>
+        </mat-tab>
+        <mat-tab label="Attempt History">
+          <mat-list class="attempts-list">
+            <mat-list-item *ngFor="let attempt of attempts">
+              <mat-icon matListItemIcon [class.success-icon]="attempt.success" [class.error-icon]="!attempt.success">
+                {{ attempt.success ? 'check_circle' : 'error' }}
+              </mat-icon>
+              <span matListItemTitle>Status: {{ attempt.httpStatus }}</span>
+              <span matListItemLine>Duration: {{ attempt.durationMs }}ms</span>
+              <span matListItemLine>Error: {{ attempt.errorType }}</span>
+              <span matListItemMeta>{{ attempt.createdAt | date:'mediumTime' }}</span>
+            </mat-list-item>
+            <div *ngIf="attempts.length === 0" class="empty-attempts">
+              No attempts recorded.
+            </div>
+          </mat-list>
+        </mat-tab>
+      </mat-tab-group>
+    </mat-card>
+
+    <!-- Endpoint Control -->
+    <mat-card class="endpoint-card" *ngIf="endpoint">
+      <mat-card-header>
+        <mat-card-title>Endpoint Control</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p><strong>Name:</strong> {{ endpoint.name }}</p>
+        <p><strong>URL:</strong> {{ endpoint.url }}</p>
+        <p><strong>Current Status:</strong> {{ endpoint.status }}</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-stroked-button color="warn" (click)="toggleEndpointStatus()">
+          {{ endpoint.status === 'ACTIVE' ? 'Pause Endpoint' : 'Activate Endpoint' }}
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  </div>
+</div>
+
+<ng-template #loadingTpl>
+  <div class="loading-container">
+    <mat-spinner></mat-spinner>
+    <p>Loading details...</p>
+  </div>
+</ng-template>

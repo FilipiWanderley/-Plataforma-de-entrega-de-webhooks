@@ -1,38 +1,60 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatCardModule, MatInputModule, MatButtonModule, MatFormFieldModule],
+  imports: [
+    CommonModule, 
+    ReactiveFormsModule, 
+    MatCardModule, 
+    MatInputModule, 
+    MatButtonModule, 
+    MatFormFieldModule,
+    MatProgressSpinnerModule
+  ],
   templateUrl: './login.component.html',
   styleUrl: './login.component.css'
 })
 export class LoginComponent {
-  credentials = {
-    email: 'ops@webhook.com',
-    password: 'password'
-  };
+  loginForm: FormGroup;
+  loading = false;
   error = '';
 
-  constructor(private authService: AuthService, private router: Router) {}
+  constructor(
+    private fb: FormBuilder,
+    private authService: AuthService, 
+    private router: Router
+  ) {
+    this.loginForm = this.fb.group({
+      email: ['ops@webhook.com', [Validators.required, Validators.email]],
+      password: ['password', [Validators.required]]
+    });
+  }
 
   onSubmit() {
-    this.authService.login(this.credentials).subscribe({
-      next: () => {
-        this.router.navigate(['/dashboard']);
-      },
-      error: (err) => {
-        this.error = 'Login failed. Please check your credentials.';
-        console.error(err);
-      }
-    });
+    if (this.loginForm.valid) {
+      this.loading = true;
+      this.error = '';
+      
+      this.authService.login(this.loginForm.value).subscribe({
+        next: () => {
+          this.router.navigate(['/dashboard']);
+        },
+        error: (err) => {
+          this.error = 'Login failed. Please check your credentials.';
+          this.loading = false;
+          console.error(err);
+        }
+      });
+    }
   }
 }
