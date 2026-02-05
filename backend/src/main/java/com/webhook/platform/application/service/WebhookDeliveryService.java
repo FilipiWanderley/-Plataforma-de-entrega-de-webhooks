@@ -56,6 +56,24 @@ public class WebhookDeliveryService {
             return;
         }
 
+        // Circuit Breaker Check
+        if (endpoint.getNextAvailableAt() != null && endpoint.getNextAvailableAt().isAfter(LocalDateTime.now())) {
+            log.warn("Endpoint {} is paused due to Circuit Breaker until {}", endpoint.getId(), endpoint.getNextAvailableAt());
+            // Create PENDING job scheduled for when CB opens
+            createPendingJob(endpoint, event, endpoint.getNextAvailableAt());
+            return;
+        }
+
+        // Concurrency Limit Check
+        long currentInProgress = jobRepository.countByEndpointIdAndStatus(endpoint.getId(), DeliveryStatus.IN_PROGRESS);
+        if (currentInProgress >= endpoint.getConcurrencyLimit()) {
+            log.info("Concurrency limit reached for endpoint {} ({}/{}). Scheduling for later.", 
+                    endpoint.getId(), currentInProgress, endpoint.getConcurrencyLimit());
+            // Schedule with small delay (e.g. 10s) to back off
+            createPendingJob(endpoint, event, LocalDateTime.now().plusSeconds(10));
+            return;
+        }
+
         // Create Job
         DeliveryJobEntity job = DeliveryJobEntity.builder()
                 .endpointId(endpoint.getId())
@@ -67,6 +85,17 @@ public class WebhookDeliveryService {
 
         // Execute Delivery
         executeDelivery(job, endpoint, event);
+    }
+
+    private void createPendingJob(WebhookEndpointEntity endpoint, OutboxEventEntity event, LocalDateTime nextAttemptAt) {
+        DeliveryJobEntity job = DeliveryJobEntity.builder()
+                .endpointId(endpoint.getId())
+                .outboxEventId(event.getId())
+                .status(DeliveryStatus.PENDING)
+                .nextAttemptAt(nextAttemptAt)
+                .attemptCount(0)
+                .build();
+        jobRepository.save(job);
     }
 
     private void executeDelivery(DeliveryJobEntity job, WebhookEndpointEntity endpoint, OutboxEventEntity event) {
@@ -133,6 +162,14 @@ public class WebhookDeliveryService {
 
             // Update Job Status
             if (success) {
+                // Reset Circuit Breaker on success
+                if (endpoint.getConsecutiveFailures() > 0) {
+                    endpoint.setConsecutiveFailures(0);
+                    endpoint.setNextAvailableAt(null);
+                    endpoint.setFailureReason(null);
+                    endpointRepository.save(endpoint);
+                }
+
                 job.setStatus(DeliveryStatus.SUCCEEDED);
                 jobRepository.save(job);
                 
@@ -150,6 +187,18 @@ public class WebhookDeliveryService {
     }
 
     private void handleFailure(DeliveryJobEntity job, WebhookEndpointEntity endpoint, Integer httpStatus, Throwable exception) {
+        // Increment Circuit Breaker Failures
+        int failures = endpoint.getConsecutiveFailures() + 1;
+        endpoint.setConsecutiveFailures(failures);
+        
+        if (failures >= endpoint.getCircuitBreakerThreshold()) {
+            LocalDateTime pausedUntil = LocalDateTime.now().plusMinutes(5);
+            endpoint.setNextAvailableAt(pausedUntil);
+            endpoint.setFailureReason("Circuit Breaker Open: " + failures + " consecutive failures. Last error: " + (httpStatus != null ? httpStatus : exception));
+            log.error("Circuit Breaker OPEN for endpoint {}. Paused until {}", endpoint.getId(), pausedUntil);
+        }
+        endpointRepository.save(endpoint);
+
         boolean canRetry = retryPolicy.canRetry(httpStatus, exception);
         
         if (!canRetry) {

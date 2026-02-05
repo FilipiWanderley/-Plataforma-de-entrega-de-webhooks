@@ -93,6 +93,15 @@ Os seguintes headers são enviados:
 3. Calcule o HMAC-SHA256 de `signed_payload` usando o seu `secret`.
 4. Compare o hash calculado com `X-Webhook-Signature`.
 
+### Concurrency Limit & Circuit Breaker
+Para proteger tanto a plataforma quanto os endpoints de destino:
+
+*   **Concurrency Limit**: Cada endpoint tem um limite configurável de envios simultâneos (default: 2). Se o limite for atingido, novas tentativas são agendadas para breve (backoff de 10s) ao invés de serem executadas imediatamente.
+*   **Circuit Breaker**: Se um endpoint falhar consecutivamente **N vezes** (default: 5), ele entra em estado de "Circuit Breaker Open" e é **pausado por 5 minutos**.
+    *   Durante este período, novos jobs são automaticamente agendados para o futuro (`nextAvailableAt`).
+    *   Após o período, uma tentativa bem-sucedida fecha o circuito (zera o contador de falhas).
+    *   O motivo da falha (`failure_reason`) é registrado no endpoint.
+
 ### 3. Rodar Frontend React (Dev Portal)
 
 ```bash

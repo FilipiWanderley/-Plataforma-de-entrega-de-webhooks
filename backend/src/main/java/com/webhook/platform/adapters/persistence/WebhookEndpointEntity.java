@@ -49,6 +49,20 @@ public class WebhookEndpointEntity {
     @Column(name = "concurrency_limit", nullable = false)
     private Integer concurrencyLimit;
 
+    @Column(name = "consecutive_failures", nullable = false)
+    @Builder.Default
+    private Integer consecutiveFailures = 0;
+
+    @Column(name = "next_available_at")
+    private LocalDateTime nextAvailableAt;
+
+    @Column(name = "failure_reason")
+    private String failureReason;
+
+    @Column(name = "circuit_breaker_threshold", nullable = false)
+    @Builder.Default
+    private Integer circuitBreakerThreshold = 5;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
