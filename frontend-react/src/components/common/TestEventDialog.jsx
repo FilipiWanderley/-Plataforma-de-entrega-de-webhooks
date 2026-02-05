@@ -12,7 +12,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Send, Code } from 'lucide-react';
-import api from '../../services/api';
+import api from '../../api/client';
 import { useToast } from '../../contexts/ToastContext';
 
 const TestEventDialog = ({ open, onClose }) => {
