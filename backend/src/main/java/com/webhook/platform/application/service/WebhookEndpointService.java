@@ -2,8 +2,8 @@ package com.webhook.platform.application.service;
 
 import com.webhook.platform.adapters.persistence.WebhookEndpointEntity;
 import com.webhook.platform.adapters.persistence.WebhookEndpointRepository;
-import com.webhook.platform.adapters.web.dto.CreateEndpointRequest;
-import com.webhook.platform.adapters.web.dto.UpdateEndpointRequest;
+import com.webhook.platform.adapters.web.dto.WebhookEndpointDTOs.CreateEndpointRequest;
+import com.webhook.platform.adapters.web.dto.WebhookEndpointDTOs.UpdateEndpointRequest;
 import com.webhook.platform.domain.model.EndpointStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

@@ -1,10 +1,9 @@
 package com.webhook.platform.adapters.web;
 
 import com.webhook.platform.adapters.persistence.WebhookEndpointEntity;
-import com.webhook.platform.adapters.web.dto.CreateEndpointRequest;
-import com.webhook.platform.adapters.web.dto.UpdateEndpointRequest;
-import com.webhook.platform.adapters.web.dto.WebhookEndpointDTOs;
-import com.webhook.platform.adapters.web.dto.WebhookEndpointResponse;
+import com.webhook.platform.adapters.web.dto.WebhookEndpointDTOs.CreateEndpointRequest;
+import com.webhook.platform.adapters.web.dto.WebhookEndpointDTOs.UpdateEndpointRequest;
+import com.webhook.platform.adapters.web.dto.WebhookEndpointDTOs.WebhookEndpointResponse;
 import com.webhook.platform.application.service.WebhookEndpointService;
 import com.webhook.platform.domain.model.User;
 import jakarta.validation.Valid;

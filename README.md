@@ -28,6 +28,25 @@ O banco de dados é migrado via Flyway e inclui as seguintes tabelas principais:
 *   Node.js 18+ & NPM
 *   Maven (opcional, pode usar `./mvnw` se gerado, mas aqui assumimos `mvn` instalado ou IDE)
 
+## Testes End-to-End (E2E)
+
+O projeto utiliza **Testcontainers** para testes de integração reais com Postgres e RabbitMQ, garantindo que o fluxo completo (API -> Banco -> Fila -> Worker -> Http) funcione corretamente.
+
+**Requisitos:**
+* Docker deve estar rodando (necessário para subir containers efêmeros de teste).
+
+**Como rodar:**
+```bash
+cd backend
+mvn test
+```
+
+Os cenários cobertos incluem:
+* **Sucesso**: Criação de endpoint, envio de evento e entrega bem-sucedida (2xx).
+* **Retry**: Simulação de erro 500 no destino, verificação de agendamento de retry e reenvio.
+* **DLQ**: Validação de envio para Dead Letter Queue após exceder o número máximo de tentativas configurado.
+* **Idempotência**: Garantia de que o mesmo evento não é entregue duplicado (Dedupe).
+
 ## Como rodar
 
 ### 1. Subir Infraestrutura

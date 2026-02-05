@@ -23,7 +23,7 @@ public class DlqController {
     @GetMapping
     @PreAuthorize("hasRole('OPS')")
     public ResponseEntity<Page<DeliveryJobEntity>> listDlq(Pageable pageable) {
-        Page<DeliveryJobEntity> page = jobRepository.findByStatus(DeliveryStatus.DLQ.name(), pageable);
+        Page<DeliveryJobEntity> page = jobRepository.findByStatus(DeliveryStatus.DLQ, pageable);
         return ResponseEntity.ok(page);
     }
 
