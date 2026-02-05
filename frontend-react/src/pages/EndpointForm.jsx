@@ -78,7 +78,7 @@ const EndpointForm = () => {
   }
 
   return (
-    <Box>
+    <Box maxWidth="md" mx="auto">
       <PageHeader 
         title={id ? 'Edit Endpoint' : 'New Endpoint'} 
         subtitle={id ? 'Update endpoint configuration' : 'Configure a new webhook endpoint'}
@@ -96,7 +96,7 @@ const EndpointForm = () => {
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
+          <Grid item xs={12}>
             <CardSection title="General Information">
               <Grid container spacing={3}>
                 <Grid item xs={12}>

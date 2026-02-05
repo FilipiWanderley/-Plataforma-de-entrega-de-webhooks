@@ -114,7 +114,7 @@ const Login = () => {
                         {showPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
                     </InputAdornment>
-                  ),
+                  )
                 }}
                 {...register('password', { required: 'Password is required' })}
                 error={!!errors.password}
@@ -126,7 +126,7 @@ const Login = () => {
                 variant="contained"
                 size="large"
                 disabled={loading}
-                sx={{ mt: 4, mb: 2, py: 1.5, borderRadius: 2, textTransform: 'none', fontSize: '1rem' }}
+                sx={{ mt: 3, mb: 2, height: 48 }}
               >
                 {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
               </Button>
@@ -134,7 +134,7 @@ const Login = () => {
           </CardContent>
         </Card>
         <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 4 }}>
-          © {new Date().getFullYear()} Webhook Platform. All rights reserved.
+          © {new Date().getFullYear()} Webhook Delivery Platform
         </Typography>
       </Container>
     </Box>

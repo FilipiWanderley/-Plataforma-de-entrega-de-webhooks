@@ -21,6 +21,7 @@ import PageHeader from '../components/common/PageHeader';
 import CardSection from '../components/common/CardSection';
 import { LoadingSkeleton, EmptyState } from '../components/common/DataState';
 import StatusChip from '../components/common/StatusChip';
+import CopyButton from '../components/common/CopyButton';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useToast } from '../contexts/ToastContext';
 
@@ -100,7 +101,7 @@ const DeliveryList = () => {
         subtitle="View and manage webhook delivery attempts"
       />
 
-      <CardSection noPadding>
+      <CardSection title="Deliveries">
         <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Stack direction="row" spacing={2}>
             <TextField
@@ -128,8 +129,8 @@ const DeliveryList = () => {
           <LoadingSkeleton rows={5} />
         ) : (
           <>
-            <TableContainer>
-              <Table sx={{ minWidth: 650 }} aria-label="deliveries table">
+            <TableContainer sx={{ maxHeight: 'calc(100vh - 300px)' }}>
+              <Table stickyHeader sx={{ minWidth: 650 }} aria-label="deliveries table">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'background.default' }}>
                     <TableCell sx={{ fontWeight: 'bold' }}>ID</TableCell>
@@ -154,8 +155,11 @@ const DeliveryList = () => {
                   ) : (
                     deliveries.map((job) => (
                       <TableRow key={job.id} hover>
-                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                          {job.id.substring(0, 8)}...
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                            {job.id.substring(0, 8)}...
+                            <CopyButton text={job.id} label="Copy ID" size="small" />
+                          </Box>
                         </TableCell>
                         <TableCell>{job.endpointName}</TableCell>
                         <TableCell>
@@ -169,27 +173,31 @@ const DeliveryList = () => {
                           {new Date(job.createdAt).toLocaleString()}
                         </TableCell>
                         <TableCell align="right">
-                          <Tooltip title="View Details">
-                            <IconButton 
-                              component={RouterLink} 
-                              to={`/deliveries/${job.id}`} 
-                              size="small"
-                              color="primary"
-                            >
-                              <Eye size={18} />
-                            </IconButton>
-                          </Tooltip>
-                          {job.status === 'DLQ' && (
-                            <Tooltip title="Replay">
+                          <Stack direction="row" spacing={1} justifyContent="flex-end">
+                            <Tooltip title="View Details">
                               <IconButton 
-                                onClick={() => handleReplayClick(job.id)} 
+                                component={RouterLink} 
+                                to={`/deliveries/${job.id}`} 
                                 size="small"
-                                color="warning"
+                                color="primary"
+                                aria-label="View Details"
                               >
-                                <RotateCw size={18} />
+                                <Eye size={18} />
                               </IconButton>
                             </Tooltip>
-                          )}
+                            {job.status === 'DLQ' && (
+                              <Tooltip title="Replay">
+                                <IconButton 
+                                  onClick={() => handleReplayClick(job.id)} 
+                                  size="small"
+                                  color="warning"
+                                  aria-label="Replay"
+                                >
+                                  <RotateCw size={18} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     ))

@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import PageHeader from '../components/common/PageHeader';
 import StatusChip from '../components/common/StatusChip';
+import CopyButton from '../components/common/CopyButton';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useToast } from '../contexts/ToastContext';
 import { LoadingSkeleton } from '../components/common/DataState';
@@ -133,6 +134,16 @@ const DeliveryDetail = () => {
             <CardContent>
               <Typography variant="h6" gutterBottom>Overview</Typography>
               <Stack spacing={2}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Delivery ID</Typography>
+                  <Box mt={0.5} sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', mr: 1 }}>
+                      {delivery.id}
+                    </Typography>
+                    <CopyButton text={delivery.id} label="Copy Delivery ID" size="small" />
+                  </Box>
+                </Box>
+
                 <Box>
                   <Typography variant="caption" color="text.secondary">Status</Typography>
                   <Box mt={0.5}>
@@ -296,23 +307,28 @@ const DeliveryDetail = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Response Snippet</DialogTitle>
+        <DialogTitle>
+          <Box display="flex" justifyContent="space-between" alignItems="center">
+            Response Snippet
+            <CopyButton text={selectedSnippet} label="Copy Snippet" />
+          </Box>
+        </DialogTitle>
         <DialogContent dividers>
-          <Box 
-            component="pre" 
+          <Paper 
+            variant="outlined" 
             sx={{ 
               p: 2, 
-              bgcolor: 'grey.900', 
-              color: 'common.white', 
-              borderRadius: 1, 
-              overflow: 'auto',
+              bgcolor: 'grey.50', 
               fontFamily: 'monospace',
               fontSize: '0.875rem',
-              maxHeight: '60vh'
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: '60vh',
+              overflow: 'auto'
             }}
           >
             {selectedSnippet}
-          </Box>
+          </Paper>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSnippetDialogOpen(false)}>Close</Button>

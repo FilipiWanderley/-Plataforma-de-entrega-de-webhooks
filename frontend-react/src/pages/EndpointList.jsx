@@ -23,6 +23,7 @@ import PageHeader from '../components/common/PageHeader';
 import CardSection from '../components/common/CardSection';
 import { LoadingSkeleton, EmptyState, ErrorState } from '../components/common/DataState';
 import StatusChip from '../components/common/StatusChip';
+import CopyButton from '../components/common/CopyButton';
 import TestEventDialog from '../components/common/TestEventDialog';
 import { useToast } from '../contexts/ToastContext';
 
@@ -160,7 +161,16 @@ const EndpointList = () => {
         }
       />
 
-      <CardSection noPadding>
+      <CardSection title="Endpoints" action={
+        <Button 
+          variant="contained" 
+          startIcon={<Plus size={20} />}
+          component={RouterLink}
+          to="/endpoints/new"
+        >
+          New Endpoint
+        </Button>
+      }>
         <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField
@@ -185,11 +195,11 @@ const EndpointList = () => {
           </Stack>
         </Box>
 
-        <TableContainer>
-          <Table sx={{ minWidth: 650 }} aria-label="endpoints table">
+        <TableContainer sx={{ maxHeight: 'calc(100vh - 300px)' }}>
+          <Table stickyHeader sx={{ minWidth: 650 }} aria-label="endpoints table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'background.default' }}>
-                <TableCell sx={{ fontWeight: 'bold' }}>Name / Description</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Name / ID</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>URL</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Config</TableCell>
@@ -227,6 +237,10 @@ const EndpointList = () => {
                   >
                     <TableCell component="th" scope="row">
                       <Box sx={{ fontWeight: 'medium' }}>{endpoint.name || endpoint.description || 'Unnamed'}</Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.secondary', fontSize: '0.75rem', mt: 0.5 }}>
+                        {endpoint.id.substring(0, 8)}...
+                        <CopyButton text={endpoint.id} label="Copy ID" size="small" />
+                      </Box>
                       {endpoint.description && endpoint.name && (
                         <Box sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{endpoint.description}</Box>
                       )}
