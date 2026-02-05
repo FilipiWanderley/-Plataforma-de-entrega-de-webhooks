@@ -95,6 +95,16 @@ Acesse em `http://localhost:4200`.
 *   Publica no RabbitMQ (Exchange: `webhook.events.exchange`) e marca como `ENQUEUED`.
 *   Em caso de falha no publish, a transação é revertida e o evento será retentado.
 
+### Webhook Consumer & Delivery Service
+*   Escuta a fila `webhook.events.queue`.
+*   Para cada evento:
+    1.  Busca endpoints ativos (`ACTIVE`) do tenant.
+    2.  Verifica idempotência via tabela `delivered_dedupe` (Evita envio duplicado se mensagem for reprocessada).
+    3.  Cria/Atualiza `delivery_jobs` e `delivery_attempts`.
+    4.  Realiza POST HTTP.
+    5.  **Sucesso (2xx)**: Marca job como `SUCCEEDED`, salva em `delivered_dedupe`.
+    6.  **Falha**: Marca job como `PENDING` (ou `FAILED` se exceder max attempts) e agenda `next_attempt_at` com backoff exponencial.
+
 ## Variáveis de Ambiente
 
 As aplicações já vêm configuradas para rodar localmente com os defaults do docker-compose. Se precisar alterar:
