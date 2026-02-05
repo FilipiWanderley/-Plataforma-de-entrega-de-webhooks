@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import EndpointList from './pages/EndpointList';
@@ -20,26 +21,28 @@ const ProtectedRoute = ({ children }) => {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      
-      <Route path="/" element={
-        <ProtectedRoute>
-          <Layout />
-        </ProtectedRoute>
-      }>
-        <Route index element={<Navigate to="/endpoints" replace />} />
+    <ToastProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
         
-        <Route path="endpoints" element={<EndpointList />} />
-        <Route path="endpoints/new" element={<EndpointForm />} />
-        <Route path="endpoints/:id/edit" element={<EndpointForm />} />
-        
-        <Route path="deliveries" element={<DeliveryList />} />
-        <Route path="deliveries/:id" element={<DeliveryDetail />} />
-        
-        <Route path="test-event" element={<TestEvent />} />
-      </Route>
-    </Routes>
+        <Route path="/" element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }>
+          <Route index element={<Navigate to="/endpoints" replace />} />
+          
+          <Route path="endpoints" element={<EndpointList />} />
+          <Route path="endpoints/new" element={<EndpointForm />} />
+          <Route path="endpoints/:id/edit" element={<EndpointForm />} />
+          
+          <Route path="deliveries" element={<DeliveryList />} />
+          <Route path="deliveries/:id" element={<DeliveryDetail />} />
+          
+          <Route path="test-event" element={<TestEvent />} />
+        </Route>
+      </Routes>
+    </ToastProvider>
   );
 }
 

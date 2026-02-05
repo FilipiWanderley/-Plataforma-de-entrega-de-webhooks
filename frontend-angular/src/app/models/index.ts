@@ -9,6 +9,7 @@ export interface DashboardMetrics {
 export interface WebhookEndpoint {
   id: string;
   name: string;
+  description?: string;
   url: string;
   status: string;
   maxAttempts: number;
