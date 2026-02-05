@@ -69,6 +69,15 @@ A API estará disponível em `http://localhost:8080`.
 *   `GET /dlq`: Listar jobs na DLQ (Ops Only)
 *   `POST /dlq/{id}/replay`: Reenviar job da DLQ (Ops Only)
 
+### Retry Policy
+A política de retry foi aprimorada para garantir robustez e evitar sobrecarga:
+*   **Exponential Backoff + Jitter**: O tempo de espera entre tentativas cresce exponencialmente (2^n) com um fator de aleatoriedade (Jitter) de 20% para evitar *thundering herd*.
+*   **Classificação de Falhas**:
+    *   **Retryable**: Timeout, Network Error, HTTP 5xx, HTTP 429 (Too Many Requests).
+    *   **Non-Retryable**: HTTP 404 (Not Found), 410 (Gone). Esses erros marcam o job imediatamente como `FAILED`.
+    *   **Outros 4xx**: Por padrão não retentam.
+*   **Delay Cap**: O tempo máximo de espera é limitado a 24 horas.
+
 ### 3. Rodar Frontend React (Dev Portal)
 
 ```bash

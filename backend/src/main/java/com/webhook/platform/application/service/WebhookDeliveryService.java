@@ -3,6 +3,7 @@ package com.webhook.platform.application.service;
 import com.webhook.platform.adapters.persistence.*;
 import com.webhook.platform.domain.model.DeliveryStatus;
 import com.webhook.platform.domain.model.EndpointStatus;
+import com.webhook.platform.domain.policy.RetryPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -22,8 +23,9 @@ public class WebhookDeliveryService {
     private final DeliveryJobRepository jobRepository;
     private final DeliveryAttemptRepository attemptRepository;
     private final DeliveredDedupeRepository dedupeRepository;
-    private final OutboxEventRepository eventRepository; // Added dependency
-    private final DeadLetterRepository deadLetterRepository; // Added dependency
+    private final OutboxEventRepository eventRepository;
+    private final DeadLetterRepository deadLetterRepository;
+    private final RetryPolicy retryPolicy;
     private final RestClient restClient = RestClient.create();
 
     public void processEvent(OutboxEventEntity event) {
@@ -76,6 +78,7 @@ public class WebhookDeliveryService {
         String errorType = null;
         String responseSnippet = null;
         boolean success = false;
+        Throwable exception = null;
 
         try {
             ResponseEntity<String> response = restClient.post()
@@ -97,12 +100,16 @@ public class WebhookDeliveryService {
             if (response.getStatusCode().is2xxSuccessful()) {
                 success = true;
             } else {
-                errorType = "HTTP_ERROR";
+                errorType = retryPolicy.determineErrorType(httpStatus, null);
             }
 
         } catch (Exception e) {
-            errorType = e.getClass().getSimpleName() + ": " + e.getMessage();
-            if (errorType.length() > 255) errorType = errorType.substring(0, 255);
+            exception = e;
+            errorType = retryPolicy.determineErrorType(null, e);
+            responseSnippet = e.getMessage();
+            if (responseSnippet != null && responseSnippet.length() > 200) {
+                responseSnippet = responseSnippet.substring(0, 200);
+            }
         } finally {
             long duration = System.currentTimeMillis() - start;
 
@@ -130,28 +137,38 @@ public class WebhookDeliveryService {
                 
                 log.info("Delivery success for job {}", job.getId());
             } else {
-                handleFailure(job, endpoint);
+                handleFailure(job, endpoint, httpStatus, exception);
             }
         }
     }
 
-    private void handleFailure(DeliveryJobEntity job, WebhookEndpointEntity endpoint) {
+    private void handleFailure(DeliveryJobEntity job, WebhookEndpointEntity endpoint, Integer httpStatus, Throwable exception) {
+        boolean canRetry = retryPolicy.canRetry(httpStatus, exception);
+        
+        if (!canRetry) {
+            job.setStatus(DeliveryStatus.FAILED);
+            log.warn("Job {} failed with non-retryable error (Status: {}, Error: {}). Marking as FAILED.", 
+                    job.getId(), httpStatus, exception != null ? exception.getMessage() : "Unknown");
+            jobRepository.save(job);
+            return;
+        }
+
         if (job.getAttemptCount() >= endpoint.getMaxAttempts()) {
             job.setStatus(DeliveryStatus.DLQ);
             log.warn("Job {} failed after {} attempts. Moving to DLQ.", job.getId(), job.getAttemptCount());
             
             DeadLetterEntity deadLetter = DeadLetterEntity.builder()
                     .deliveryJobId(job.getId())
-                    .reason("Max attempts reached: " + job.getAttemptCount())
+                    .reason("Max attempts reached: " + job.getAttemptCount() + ". Last error: " + (httpStatus != null ? httpStatus : exception))
                     .build();
             deadLetterRepository.save(deadLetter);
             
         } else {
-            // Calculate Next Attempt (Exponential Backoff: 2^attempt * 1s)
-            long delaySeconds = (long) Math.pow(2, job.getAttemptCount());
+            // Calculate Next Attempt with Policy
+            long delaySeconds = retryPolicy.calculateDelaySeconds(job.getAttemptCount());
             job.setNextAttemptAt(LocalDateTime.now().plusSeconds(delaySeconds));
             job.setStatus(DeliveryStatus.PENDING); // Will be picked up by a retry poller
-            log.info("Job {} scheduled for retry at {}", job.getId(), job.getNextAttemptAt());
+            log.info("Job {} scheduled for retry at {} (Delay: {}s)", job.getId(), job.getNextAttemptAt(), delaySeconds);
         }
         jobRepository.save(job);
     }
