@@ -1,41 +1,28 @@
 .dashboard-container {
-  padding: 2rem;
+  padding: 24px;
 }
-
-h1 {
-  margin-bottom: 2rem;
-  color: #333;
+.loading-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
 }
-
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.5rem;
+  gap: 24px;
+  margin-top: 24px;
 }
-
 .metric-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  text-align: center;
+  height: 100%;
 }
-
-.metric-card h3 {
-  margin: 0 0 1rem 0;
-  color: #666;
-  font-size: 1rem;
-  text-transform: uppercase;
-}
-
-.metric-card .value {
+.value {
   font-size: 2.5rem;
   font-weight: bold;
-  color: #333;
+  margin-top: 16px;
 }
-
-.success { border-top: 4px solid #28a745; }
-.pending { border-top: 4px solid #ffc107; }
-.processing { border-top: 4px solid #17a2b8; }
-.failed { border-top: 4px solid #dc3545; }
-.dlq { border-top: 4px solid #6c757d; }
+.success-text { color: #4caf50; }
+.pending-text { color: #ff9800; }
+.processing-text { color: #2196f3; }
+.failed-text { color: #f44336; }
+.dlq-text { color: #9c27b0; }

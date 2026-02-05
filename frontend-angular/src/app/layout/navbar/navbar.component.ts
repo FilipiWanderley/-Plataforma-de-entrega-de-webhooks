@@ -1,61 +1,36 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterLink, RouterLinkActive, MatToolbarModule, MatButtonModule],
   template: `
-    <nav class="navbar" *ngIf="authService.isAuthenticated$ | async">
-      <div class="brand">Webhook OPS</div>
-      <ul class="nav-links">
-        <li><a routerLink="/dashboard" routerLinkActive="active">Dashboard</a></li>
-        <li><a routerLink="/dlq" routerLinkActive="active">DLQ</a></li>
-        <li><a routerLink="/endpoints" routerLinkActive="active">Endpoints</a></li>
-      </ul>
-      <button (click)="logout()" class="logout-btn">Logout</button>
-    </nav>
+    <mat-toolbar color="primary" *ngIf="authService.isAuthenticated$ | async">
+      <span>Webhook OPS</span>
+      <span class="spacer"></span>
+      <div class="nav-links">
+        <a mat-button routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+        <a mat-button routerLink="/dlq" routerLinkActive="active">DLQ</a>
+        <a mat-button routerLink="/endpoints" routerLinkActive="active">Endpoints</a>
+        <button mat-button (click)="logout()">Logout</button>
+      </div>
+    </mat-toolbar>
   `,
   styles: [`
-    .navbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1rem 2rem;
-      background-color: #343a40;
-      color: white;
-    }
-    .brand {
-      font-weight: bold;
-      font-size: 1.2rem;
+    .spacer {
+      flex: 1 1 auto;
     }
     .nav-links {
       display: flex;
-      list-style: none;
-      gap: 1.5rem;
-      margin: 0;
-      padding: 0;
+      gap: 1rem;
     }
-    .nav-links a {
-      color: #ccc;
-      text-decoration: none;
-      font-weight: 500;
-    }
-    .nav-links a.active, .nav-links a:hover {
-      color: white;
-    }
-    .logout-btn {
-      background: transparent;
-      border: 1px solid #ccc;
-      color: white;
-      padding: 0.25rem 0.75rem;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    .logout-btn:hover {
-      background: rgba(255,255,255,0.1);
+    .active {
+      background-color: rgba(255, 255, 255, 0.1);
     }
   `]
 })

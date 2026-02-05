@@ -1,28 +1,55 @@
 <div class="dashboard-container">
   <h1>Operational Dashboard</h1>
   
-  <div *ngIf="loading" class="loading">Loading metrics...</div>
+  <div *ngIf="loading" class="loading-container">
+    <mat-spinner diameter="40"></mat-spinner>
+    <span>Loading metrics...</span>
+  </div>
   
   <div *ngIf="metrics" class="metrics-grid">
-    <div class="metric-card success">
-      <h3>Success</h3>
-      <div class="value">{{ metrics.totalSuccess }}</div>
-    </div>
-    <div class="metric-card pending">
-      <h3>Pending</h3>
-      <div class="value">{{ metrics.totalPending }}</div>
-    </div>
-    <div class="metric-card processing">
-      <h3>Processing</h3>
-      <div class="value">{{ metrics.totalProcessing }}</div>
-    </div>
-    <div class="metric-card failed">
-      <h3>Failed</h3>
-      <div class="value">{{ metrics.totalFailed }}</div>
-    </div>
-    <div class="metric-card dlq">
-      <h3>DLQ</h3>
-      <div class="value">{{ metrics.totalDlq }}</div>
-    </div>
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title class="success-text">Success</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="value">{{ metrics.totalSuccess }}</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title class="pending-text">Pending</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="value">{{ metrics.totalPending }}</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title class="processing-text">Processing</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="value">{{ metrics.totalProcessing }}</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title class="failed-text">Failed</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="value">{{ metrics.totalFailed }}</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-card-title class="dlq-text">DLQ</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="value">{{ metrics.totalDlq }}</div>
+      </mat-card-content>
+    </mat-card>
   </div>
 </div>
