@@ -65,6 +65,7 @@ A API estará disponível em `http://localhost:8080`.
 *   `GET /endpoints`: Listar endpoints (filtros: `status`)
 *   `POST /endpoints`: Criar endpoint (Dev)
 *   `POST /endpoints/{id}/block`: Bloquear endpoint (Ops Only)
+*   `POST /events`: Enviar evento (payload JSON)
 
 ### 3. Rodar Frontend React (Dev Portal)
 
