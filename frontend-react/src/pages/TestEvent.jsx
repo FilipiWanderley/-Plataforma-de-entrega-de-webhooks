@@ -1,110 +1,176 @@
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import api from '../api/client';
-import { Send, CheckCircle, AlertTriangle } from 'lucide-react';
-import './TestEvent.css';
+import { Send, Code, RotateCcw } from 'lucide-react';
+import { 
+  Box, 
+  Grid, 
+  TextField, 
+  Button, 
+  Alert,
+  AlertTitle,
+  Stack,
+  Typography
+} from '@mui/material';
+import PageHeader from '../components/common/PageHeader';
+import CardSection from '../components/common/CardSection';
+import { useToast } from '../contexts/ToastContext';
 
 const TestEvent = () => {
-  const { register, handleSubmit, formState: { errors }, reset } = useForm();
+  const { control, handleSubmit, setValue, formState: { errors } } = useForm({
+    defaultValues: {
+      eventType: '',
+      payload: ''
+    }
+  });
+  
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const { success, error: toastError } = useToast();
 
   const onSubmit = async (data) => {
     setLoading(true);
     setResult(null);
     try {
-      let payload;
+      let payloadJson;
       try {
-        payload = JSON.parse(data.payload);
+        payloadJson = JSON.parse(data.payload);
       } catch (e) {
-        alert('Invalid JSON Payload');
+        toastError('Invalid JSON Payload');
         setLoading(false);
         return;
       }
 
       const response = await api.post('/events', {
         eventType: data.eventType,
-        payload: payload
+        payload: payloadJson
       });
 
       setResult({
         success: true,
-        message: `Event sent successfully! ID: ${response.data.id}`
+        message: `Event sent successfully!`,
+        id: response.data.id
       });
-      // Optional: clear form
-      // reset(); 
+      success('Event broadcasted to active endpoints');
     } catch (error) {
       console.error('Error sending event:', error);
       setResult({
         success: false,
-        message: 'Failed to send event. Check console for details.'
+        message: 'Failed to send event.'
       });
+      toastError('Failed to send event');
     } finally {
       setLoading(false);
     }
   };
 
   const fillExample = () => {
-    reset({
-      eventType: 'ORDER_CREATED',
-      payload: JSON.stringify({
-        orderId: "12345",
-        customer: "John Doe",
-        amount: 99.99,
-        items: [{ id: "p1", name: "Product A" }]
-      }, null, 2)
-    });
+    setValue('eventType', 'ORDER_CREATED');
+    setValue('payload', JSON.stringify({
+      orderId: "12345",
+      customer: "John Doe",
+      amount: 99.99,
+      items: [{ id: "p1", name: "Product A" }]
+    }, null, 2));
   };
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <h1>Send Test Event</h1>
-      </div>
+    <Box>
+      <PageHeader 
+        title="Send Test Event" 
+        subtitle="Broadcast an event to all active endpoints"
+      />
 
-      <div className="test-event-container">
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <div className="form-group">
-            <label>Event Type</label>
-            <input 
-              {...register('eventType', { required: true })} 
-              placeholder="e.g. ORDER_CREATED"
-            />
-            {errors.eventType && <span>Event Type is required</span>}
-          </div>
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={8}>
+          <CardSection title="Event Details">
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <Stack spacing={3}>
+                <Controller
+                  name="eventType"
+                  control={control}
+                  rules={{ required: 'Event Type is required' }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Event Type"
+                      placeholder="e.g. ORDER_CREATED"
+                      error={!!errors.eventType}
+                      helperText={errors.eventType?.message}
+                      fullWidth
+                    />
+                  )}
+                />
 
-          <div className="form-group">
-            <label>Payload (JSON)</label>
-            <textarea 
-              {...register('payload', { required: true })} 
-              rows={10}
-              placeholder='{"key": "value"}'
-            />
-            {errors.payload && <span>Payload is required</span>}
-          </div>
+                <Controller
+                  name="payload"
+                  control={control}
+                  rules={{ required: 'Payload is required' }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="JSON Payload"
+                      multiline
+                      rows={10}
+                      placeholder='{"key": "value"}'
+                      error={!!errors.payload}
+                      helperText={errors.payload?.message}
+                      fullWidth
+                      sx={{ fontFamily: 'monospace' }}
+                    />
+                  )}
+                />
 
-          <div className="form-actions">
-            <button type="button" onClick={fillExample} className="btn-secondary">
-              Load Example
-            </button>
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Sending...' : (
-                <>
-                  <Send size={18} /> Send Event
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+                <Stack direction="row" spacing={2}>
+                  <Button 
+                    variant="contained" 
+                    type="submit" 
+                    startIcon={<Send size={18} />}
+                    disabled={loading}
+                    size="large"
+                  >
+                    {loading ? 'Sending...' : 'Send Event'}
+                  </Button>
+                  <Button 
+                    variant="outlined" 
+                    onClick={fillExample}
+                    startIcon={<RotateCcw size={18} />}
+                  >
+                    Load Example
+                  </Button>
+                </Stack>
+              </Stack>
+            </form>
+          </CardSection>
 
-        {result && (
-          <div className={`result-box ${result.success ? 'success' : 'error'}`}>
-            {result.success ? <CheckCircle size={24} /> : <AlertTriangle size={24} />}
-            <p>{result.message}</p>
-          </div>
-        )}
-      </div>
-    </div>
+          {result && (
+            <Box mt={3}>
+              <Alert severity={result.success ? 'success' : 'error'}>
+                <AlertTitle>{result.success ? 'Success' : 'Error'}</AlertTitle>
+                {result.message}
+                {result.id && (
+                  <Typography variant="body2" sx={{ mt: 1, fontFamily: 'monospace' }}>
+                    Event ID: {result.id}
+                  </Typography>
+                )}
+              </Alert>
+            </Box>
+          )}
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Alert severity="info" icon={<Code />}>
+            <AlertTitle>How it works</AlertTitle>
+            This form simulates an event occurring in your system. 
+            The event will be matched against all <strong>Active</strong> endpoints 
+            configured for your tenant.
+            <Box mt={2}>
+              <strong>Note:</strong> Ensure you have at least one active endpoint to receive this event.
+            </Box>
+          </Alert>
+        </Grid>
+      </Grid>
+    </Box>
   );
 };
 
