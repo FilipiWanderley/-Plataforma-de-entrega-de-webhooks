@@ -60,6 +60,12 @@ A API estará disponível em `http://localhost:8080`.
 *   **Dev:** `dev@local` / `password`
 *   **Ops:** `ops@local` / `password`
 
+**Endpoints Principais:**
+*   `POST /auth/login`: Obter token JWT
+*   `GET /endpoints`: Listar endpoints (filtros: `status`)
+*   `POST /endpoints`: Criar endpoint (Dev)
+*   `POST /endpoints/{id}/block`: Bloquear endpoint (Ops Only)
+
 ### 3. Rodar Frontend React (Dev Portal)
 
 ```bash
