@@ -15,22 +15,31 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.SneakyThrows;
+
 @RestController
 @RequestMapping("/events")
 @RequiredArgsConstructor
 public class EventController {
 
     private final EventService service;
+    private final ObjectMapper objectMapper;
 
     @PostMapping
+    @SneakyThrows
     public ResponseEntity<EventResponse> create(
             @AuthenticationPrincipal User user,
             @Valid @RequestBody CreateEventRequest request) {
         
+        String payloadJson = request.getPayload() instanceof String 
+                ? (String) request.getPayload() 
+                : objectMapper.writeValueAsString(request.getPayload());
+
         UUID eventId = service.createEvent(
                 user.getTenantId(),
                 request.getEventType(),
-                request.getPayload()
+                payloadJson
         );
         
         return ResponseEntity.ok(new EventResponse(eventId));

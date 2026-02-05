@@ -26,6 +26,10 @@ public class DeliveryJobEntity {
     @Column(name = "endpoint_id", nullable = false)
     private UUID endpointId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "endpoint_id", insertable = false, updatable = false)
+    private WebhookEndpointEntity endpoint;
+
     @Column(name = "outbox_event_id", nullable = false)
     private UUID outboxEventId;
 

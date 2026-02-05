@@ -28,6 +28,27 @@ O banco de dados é migrado via Flyway e inclui as seguintes tabelas principais:
 *   Node.js 18+ & NPM
 *   Maven (opcional, pode usar `./mvnw` se gerado, mas aqui assumimos `mvn` instalado ou IDE)
 
+## Frontend (React)
+
+O projeto inclui um frontend em React (Vite) para gerenciamento da plataforma.
+
+**Funcionalidades:**
+* Login (simulado com token JWT).
+* Gerenciamento de Endpoints (Lista, Criar, Editar).
+* Visualização de Entregas (Lista com filtros, Detalhes com histórico de tentativas).
+* Replay de mensagens na DLQ.
+* Envio de Evento de Teste.
+
+**Como rodar:**
+```bash
+cd frontend-react
+npm install
+npm run dev
+```
+
+Acesse em: `http://localhost:5173`
+Credenciais de teste: `dev@local` / `password`
+
 ## Testes End-to-End (E2E)
 
 O projeto utiliza **Testcontainers** para testes de integração reais com Postgres e RabbitMQ, garantindo que o fluxo completo (API -> Banco -> Fila -> Worker -> Http) funcione corretamente.

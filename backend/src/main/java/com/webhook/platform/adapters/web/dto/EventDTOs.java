@@ -16,8 +16,7 @@ public class EventDTOs {
         @NotBlank(message = "Event type is required")
         private String eventType;
 
-        @NotBlank(message = "Payload is required")
-        private String payload;
+        private Object payload;
     }
 
     @Data
