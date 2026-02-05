@@ -66,6 +66,8 @@ A API estará disponível em `http://localhost:8080`.
 *   `POST /endpoints`: Criar endpoint (Dev)
 *   `POST /endpoints/{id}/block`: Bloquear endpoint (Ops Only)
 *   `POST /events`: Enviar evento (payload JSON)
+*   `GET /dlq`: Listar jobs na DLQ (Ops Only)
+*   `POST /dlq/{id}/replay`: Reenviar job da DLQ (Ops Only)
 
 ### 3. Rodar Frontend React (Dev Portal)
 
@@ -103,7 +105,18 @@ Acesse em `http://localhost:4200`.
     3.  Cria/Atualiza `delivery_jobs` e `delivery_attempts`.
     4.  Realiza POST HTTP.
     5.  **Sucesso (2xx)**: Marca job como `SUCCEEDED`, salva em `delivered_dedupe`.
-    6.  **Falha**: Marca job como `PENDING` (ou `FAILED` se exceder max attempts) e agenda `next_attempt_at` com backoff exponencial.
+    6.  **Falha**: Marca job como `PENDING` (ou `DLQ` se exceder max attempts) e agenda `next_attempt_at` com backoff exponencial.
+
+### Retry Dispatcher
+*   Job agendado que lê `delivery_jobs` com status `PENDING` e `next_attempt_at <= NOW`.
+*   Utiliza `SELECT FOR UPDATE SKIP LOCKED` para concorrência segura.
+*   Publica o ID do job na fila de retry (`webhook.jobs.retry.queue`).
+*   Consumer específico (`WebhookJobConsumer`) processa o retry chamando o serviço de entrega.
+
+### Dead Letter Queue (DLQ)
+*   Jobs que excedem o número máximo de tentativas (configurado no endpoint) são movidos para status `DLQ`.
+*   Registro detalhado salvo na tabela `dead_letters`.
+*   Endpoints `/dlq` permitem listar e fazer "replay" (resetar para `PENDING` e zerar tentativas).
 
 ## Variáveis de Ambiente
 

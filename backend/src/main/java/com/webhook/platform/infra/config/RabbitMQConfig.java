@@ -15,6 +15,9 @@ public class RabbitMQConfig {
     public static final String QUEUE_NAME = "webhook.events.queue";
     public static final String ROUTING_KEY = "webhook.event.created";
 
+    public static final String RETRY_QUEUE_NAME = "webhook.jobs.retry.queue";
+    public static final String RETRY_ROUTING_KEY = "webhook.job.retry";
+
     @Bean
     public TopicExchange exchange() {
         return new TopicExchange(EXCHANGE_NAME);
@@ -26,8 +29,18 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue retryQueue() {
+        return QueueBuilder.durable(RETRY_QUEUE_NAME).build();
+    }
+
+    @Bean
     public Binding binding(Queue queue, TopicExchange exchange) {
         return BindingBuilder.bind(queue).to(exchange).with(ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding retryBinding(Queue retryQueue, TopicExchange exchange) {
+        return BindingBuilder.bind(retryQueue).to(exchange).with(RETRY_ROUTING_KEY);
     }
 
     @Bean

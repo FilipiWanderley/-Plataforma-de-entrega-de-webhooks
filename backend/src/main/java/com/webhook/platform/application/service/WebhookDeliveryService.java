@@ -22,6 +22,8 @@ public class WebhookDeliveryService {
     private final DeliveryJobRepository jobRepository;
     private final DeliveryAttemptRepository attemptRepository;
     private final DeliveredDedupeRepository dedupeRepository;
+    private final OutboxEventRepository eventRepository; // Added dependency
+    private final DeadLetterRepository deadLetterRepository; // Added dependency
     private final RestClient restClient = RestClient.create();
 
     public void processEvent(OutboxEventEntity event) {
@@ -135,8 +137,15 @@ public class WebhookDeliveryService {
 
     private void handleFailure(DeliveryJobEntity job, WebhookEndpointEntity endpoint) {
         if (job.getAttemptCount() >= endpoint.getMaxAttempts()) {
-            job.setStatus(DeliveryStatus.FAILED); // Or DLQ logic
-            log.warn("Job {} failed after {} attempts", job.getId(), job.getAttemptCount());
+            job.setStatus(DeliveryStatus.DLQ);
+            log.warn("Job {} failed after {} attempts. Moving to DLQ.", job.getId(), job.getAttemptCount());
+            
+            DeadLetterEntity deadLetter = DeadLetterEntity.builder()
+                    .deliveryJobId(job.getId())
+                    .reason("Max attempts reached: " + job.getAttemptCount())
+                    .build();
+            deadLetterRepository.save(deadLetter);
+            
         } else {
             // Calculate Next Attempt (Exponential Backoff: 2^attempt * 1s)
             long delaySeconds = (long) Math.pow(2, job.getAttemptCount());
@@ -145,5 +154,20 @@ public class WebhookDeliveryService {
             log.info("Job {} scheduled for retry at {}", job.getId(), job.getNextAttemptAt());
         }
         jobRepository.save(job);
+    }
+
+    public void retryJob(java.util.UUID jobId) {
+        DeliveryJobEntity job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
+
+        // Sanity check: Should be IN_PROGRESS (marked by dispatcher) or PENDING
+        
+        WebhookEndpointEntity endpoint = endpointRepository.findById(job.getEndpointId())
+                .orElseThrow(() -> new IllegalStateException("Endpoint not found for job " + jobId));
+
+        OutboxEventEntity event = eventRepository.findById(job.getOutboxEventId())
+                .orElseThrow(() -> new IllegalStateException("Event not found for job " + jobId));
+
+        executeDelivery(job, endpoint, event);
     }
 }
