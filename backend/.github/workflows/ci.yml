@@ -1,0 +1,37 @@
+name: Java CI with Maven
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+
+    - name: Check Formatting (Spotless)
+      run: mvn spotless:check
+
+    - name: Run Linter (Checkstyle, PMD, SpotBugs)
+      run: mvn verify -DskipTests
+
+    - name: Run Tests
+      run: mvn test
+
+    - name: Build with Maven
+      run: mvn package -DskipTests

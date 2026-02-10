@@ -8,8 +8,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class WebhookPlatformApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(WebhookPlatformApplication.class, args);
-	}
-
+  public static void main(String[] args) {
+    SpringApplication.run(WebhookPlatformApplication.class, args);
+  }
 }

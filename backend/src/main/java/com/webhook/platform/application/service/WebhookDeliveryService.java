@@ -1,6 +1,8 @@
 package com.webhook.platform.application.service;
 
-import com.webhook.platform.adapters.persistence.*;
+import com.webhook.platform.application.port.out.WebhookClient;
+import com.webhook.platform.application.repository.*;
+import com.webhook.platform.domain.entity.*;
 import com.webhook.platform.domain.model.DeliveryStatus;
 import com.webhook.platform.domain.model.EndpointStatus;
 import com.webhook.platform.domain.policy.RetryPolicy;
@@ -8,274 +10,314 @@ import com.webhook.platform.domain.security.HmacUtils;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.observation.annotation.Observed;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import java.util.UUID;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class WebhookDeliveryService {
 
-    private final WebhookEndpointRepository endpointRepository;
-    private final DeliveryJobRepository jobRepository;
-    private final DeliveryAttemptRepository attemptRepository;
-    private final DeliveredDedupeRepository dedupeRepository;
-    private final OutboxEventRepository eventRepository;
-    private final DeadLetterRepository deadLetterRepository;
-    private final RetryPolicy retryPolicy;
-    private final RestClient restClient = RestClient.create();
-    private final MeterRegistry meterRegistry;
+  private final WebhookEndpointRepository endpointRepository;
+  private final DeliveryJobRepository jobRepository;
+  private final DeliveryAttemptRepository attemptRepository;
+  private final DeliveredDedupeRepository dedupeRepository;
+  private final OutboxEventRepository eventRepository;
+  private final DeadLetterRepository deadLetterRepository;
+  private final RetryPolicy retryPolicy;
+  private final WebhookClient webhookClient;
+  private final MeterRegistry meterRegistry;
 
-    public Page<DeliveryJobEntity> listJobs(UUID tenantId, DeliveryStatus status, Pageable pageable) {
-        if (status != null) {
-            return jobRepository.findByEndpointTenantIdAndStatus(tenantId, status, pageable);
-        }
-        return jobRepository.findByEndpointTenantId(tenantId, pageable);
+  public Page<DeliveryJobEntity> listJobs(UUID tenantId, DeliveryStatus status, Pageable pageable) {
+    if (status != null) {
+      return jobRepository.findByEndpointTenantIdAndStatus(tenantId, status, pageable);
+    }
+    return jobRepository.findByEndpointTenantId(tenantId, pageable);
+  }
+
+  public List<DeliveryAttemptEntity> listAttempts(UUID jobId) {
+    return attemptRepository.findByDeliveryJobIdOrderByCreatedAtDesc(jobId);
+  }
+
+  public DeliveryJobEntity getJob(UUID id) {
+    return jobRepository
+        .findById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Delivery Job not found with id: " + id));
+  }
+
+  @Observed(name = "webhook.delivery.process", contextualName = "process-event")
+  public void processEvent(OutboxEventEntity event) {
+    log.info("Processing event {} for tenant {}", event.getId(), event.getTenantId());
+
+    List<WebhookEndpointEntity> endpoints =
+        endpointRepository.findByTenantIdAndStatus(event.getTenantId(), EndpointStatus.ACTIVE);
+
+    if (endpoints.isEmpty()) {
+      log.info("No active endpoints for tenant {}", event.getTenantId());
+      return;
     }
 
-    public List<DeliveryAttemptEntity> listAttempts(UUID jobId) {
-        return attemptRepository.findByDeliveryJobIdOrderByCreatedAtDesc(jobId);
+    for (WebhookEndpointEntity endpoint : endpoints) {
+      processEndpointDelivery(event, endpoint);
+    }
+  }
+
+  private void processEndpointDelivery(OutboxEventEntity event, WebhookEndpointEntity endpoint) {
+    // Enforce Idempotency: Deduplication table prevents double-delivery from dispatcher retries.
+    DeliveredDedupeId dedupeId = new DeliveredDedupeId(endpoint.getId(), event.getId());
+    if (dedupeRepository.existsById(dedupeId)) {
+      log.info("Event {} already delivered to endpoint {}", event.getId(), endpoint.getId());
+      return;
     }
 
-    public DeliveryJobEntity getJob(UUID id) {
-        return jobRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Delivery Job not found with id: " + id));
+    // Circuit Breaker: Fail fast if endpoint is unhealthy to protect system resources.
+    if (endpoint.getNextAvailableAt() != null
+        && endpoint.getNextAvailableAt().isAfter(LocalDateTime.now())) {
+      log.warn(
+          "Endpoint {} is paused due to Circuit Breaker until {}",
+          endpoint.getId(),
+          endpoint.getNextAvailableAt());
+      createPendingJob(endpoint, event, endpoint.getNextAvailableAt());
+      return;
     }
 
-    @Observed(name = "webhook.delivery.process", contextualName = "process-event")
-    public void processEvent(OutboxEventEntity event) {
-        log.info("Processing event {} for tenant {}", event.getId(), event.getTenantId());
-
-        List<WebhookEndpointEntity> endpoints = endpointRepository.findByTenantIdAndStatus(
-                event.getTenantId(), EndpointStatus.ACTIVE.name()
-        );
-
-        if (endpoints.isEmpty()) {
-            log.info("No active endpoints for tenant {}", event.getTenantId());
-            return;
-        }
-
-        for (WebhookEndpointEntity endpoint : endpoints) {
-            processEndpointDelivery(event, endpoint);
-        }
+    // Concurrency Control: Limit parallel requests per endpoint to avoid overwhelming the
+    // subscriber.
+    long currentInProgress =
+        jobRepository.countByEndpointIdAndStatus(endpoint.getId(), DeliveryStatus.IN_PROGRESS);
+    if (currentInProgress >= endpoint.getConcurrencyLimit()) {
+      log.info(
+          "Concurrency limit reached for endpoint {} ({}/{}). Scheduling for later.",
+          endpoint.getId(),
+          currentInProgress,
+          endpoint.getConcurrencyLimit());
+      createPendingJob(endpoint, event, LocalDateTime.now().plusSeconds(10));
+      return;
     }
 
-    private void processEndpointDelivery(OutboxEventEntity event, WebhookEndpointEntity endpoint) {
-        // Enforce Idempotency: Deduplication table prevents double-delivery from dispatcher retries.
-        DeliveredDedupeId dedupeId = new DeliveredDedupeId(endpoint.getId(), event.getId());
-        if (dedupeRepository.existsById(dedupeId)) {
-            log.info("Event {} already delivered to endpoint {}", event.getId(), endpoint.getId());
-            return;
+    // Create Job
+    DeliveryJobEntity job =
+        DeliveryJobEntity.builder()
+            .endpointId(endpoint.getId())
+            .outboxEventId(event.getId())
+            .status(DeliveryStatus.IN_PROGRESS)
+            .attemptCount(0)
+            .build();
+    job = jobRepository.save(job);
+
+    // Execute Delivery
+    executeDelivery(job, endpoint, event);
+  }
+
+  private void createPendingJob(
+      WebhookEndpointEntity endpoint, OutboxEventEntity event, LocalDateTime nextAttemptAt) {
+    DeliveryJobEntity job =
+        DeliveryJobEntity.builder()
+            .endpointId(endpoint.getId())
+            .outboxEventId(event.getId())
+            .status(DeliveryStatus.PENDING)
+            .nextAttemptAt(nextAttemptAt)
+            .attemptCount(0)
+            .build();
+    jobRepository.save(job);
+  }
+
+  @Observed(name = "webhook.delivery.attempt", contextualName = "execute-delivery")
+  private void executeDelivery(
+      DeliveryJobEntity job, WebhookEndpointEntity endpoint, OutboxEventEntity event) {
+    long start = System.currentTimeMillis();
+    int attemptNo = job.getAttemptCount() + 1;
+
+    job.setAttemptCount(attemptNo);
+
+    Integer httpStatus = null;
+    String errorType = null;
+    String responseSnippet = null;
+    boolean success = false;
+    Throwable exception = null;
+
+    try {
+      long timestamp = System.currentTimeMillis();
+      String payload = event.getPayloadJson();
+      String signature = HmacUtils.sign(timestamp + "." + payload, endpoint.getSecret());
+
+      Map<String, String> headers = new HashMap<>();
+      headers.put("X-Webhook-Event", event.getEventType());
+      headers.put("X-Webhook-Id", event.getId().toString());
+      headers.put("X-Webhook-Timestamp", String.valueOf(timestamp));
+      headers.put("X-Webhook-Signature", signature);
+      headers.put("User-Agent", "WebhookPlatform/1.0");
+
+      ResponseEntity<String> response = webhookClient.post(endpoint.getUrl(), headers, payload);
+
+      httpStatus = response.getStatusCode().value();
+      responseSnippet = response.getBody();
+      if (responseSnippet != null && responseSnippet.length() > 200) {
+        responseSnippet = responseSnippet.substring(0, 200);
+      }
+
+      if (response.getStatusCode().is2xxSuccessful()) {
+        success = true;
+      } else {
+        errorType = retryPolicy.determineErrorType(httpStatus, null);
+      }
+
+    } catch (Exception e) {
+      exception = e;
+      errorType = retryPolicy.determineErrorType(null, e);
+      responseSnippet = e.getMessage();
+      if (responseSnippet != null && responseSnippet.length() > 200) {
+        responseSnippet = responseSnippet.substring(0, 200);
+      }
+    } finally {
+      long duration = System.currentTimeMillis() - start;
+
+      Timer.builder("webhook.delivery.latency")
+          .tag("status", success ? "success" : "failure")
+          .tag("error", errorType != null ? errorType : "none")
+          .register(meterRegistry)
+          .record(duration, TimeUnit.MILLISECONDS);
+
+      if (success) {
+        meterRegistry.counter("webhook.delivery.success").increment();
+      } else {
+        meterRegistry.counter("webhook.delivery.failure", "reason", errorType).increment();
+      }
+
+      DeliveryAttemptEntity attempt =
+          DeliveryAttemptEntity.builder()
+              .deliveryJobId(job.getId())
+              .attemptNo(attemptNo)
+              .httpStatus(httpStatus)
+              .errorType(errorType)
+              .durationMs(duration)
+              .responseSnippet(responseSnippet)
+              .build();
+      attemptRepository.save(attempt);
+
+      if (success) {
+        // Reset Circuit Breaker on success to restore normal traffic flow.
+        if (endpoint.getConsecutiveFailures() > 0) {
+          endpoint.setConsecutiveFailures(0);
+          endpoint.setNextAvailableAt(null);
+          endpoint.setFailureReason(null);
+          endpointRepository.save(endpoint);
         }
 
-        // Circuit Breaker: Fail fast if endpoint is unhealthy to protect system resources.
-        if (endpoint.getNextAvailableAt() != null && endpoint.getNextAvailableAt().isAfter(LocalDateTime.now())) {
-            log.warn("Endpoint {} is paused due to Circuit Breaker until {}", endpoint.getId(), endpoint.getNextAvailableAt());
-            createPendingJob(endpoint, event, endpoint.getNextAvailableAt());
-            return;
-        }
-
-        // Concurrency Control: Limit parallel requests per endpoint to avoid overwhelming the subscriber.
-        long currentInProgress = jobRepository.countByEndpointIdAndStatus(endpoint.getId(), DeliveryStatus.IN_PROGRESS);
-        if (currentInProgress >= endpoint.getConcurrencyLimit()) {
-            log.info("Concurrency limit reached for endpoint {} ({}/{}). Scheduling for later.", 
-                    endpoint.getId(), currentInProgress, endpoint.getConcurrencyLimit());
-            createPendingJob(endpoint, event, LocalDateTime.now().plusSeconds(10));
-            return;
-        }
-
-        // Create Job
-        DeliveryJobEntity job = DeliveryJobEntity.builder()
-                .endpointId(endpoint.getId())
-                .outboxEventId(event.getId())
-                .status(DeliveryStatus.IN_PROGRESS)
-                .attemptCount(0)
-                .build();
-        job = jobRepository.save(job);
-
-        // Execute Delivery
-        executeDelivery(job, endpoint, event);
-    }
-
-    private void createPendingJob(WebhookEndpointEntity endpoint, OutboxEventEntity event, LocalDateTime nextAttemptAt) {
-        DeliveryJobEntity job = DeliveryJobEntity.builder()
-                .endpointId(endpoint.getId())
-                .outboxEventId(event.getId())
-                .status(DeliveryStatus.PENDING)
-                .nextAttemptAt(nextAttemptAt)
-                .attemptCount(0)
-                .build();
+        job.setStatus(DeliveryStatus.SUCCEEDED);
         jobRepository.save(job);
+
+        DeliveredDedupeEntity dedupe =
+            DeliveredDedupeEntity.builder()
+                .id(new DeliveredDedupeId(endpoint.getId(), event.getId()))
+                .build();
+        dedupeRepository.save(dedupe);
+
+        log.info("Delivery success for job {}", job.getId());
+      } else {
+        handleFailure(job, endpoint, httpStatus, exception);
+      }
+    }
+  }
+
+  private void handleFailure(
+      DeliveryJobEntity job,
+      WebhookEndpointEntity endpoint,
+      Integer httpStatus,
+      Throwable exception) {
+    // Increment Circuit Breaker Failures
+    int failures = endpoint.getConsecutiveFailures() + 1;
+    endpoint.setConsecutiveFailures(failures);
+
+    if (failures >= endpoint.getCircuitBreakerThreshold()) {
+      LocalDateTime pausedUntil = LocalDateTime.now().plusMinutes(5);
+      endpoint.setNextAvailableAt(pausedUntil);
+      endpoint.setFailureReason(
+          "Circuit Breaker Open: "
+              + failures
+              + " consecutive failures. Last error: "
+              + (httpStatus != null ? httpStatus : exception));
+      log.error(
+          "Circuit Breaker OPEN for endpoint {}. Paused until {}", endpoint.getId(), pausedUntil);
+      meterRegistry
+          .counter("webhook.circuit_breaker.open", "endpoint", endpoint.getId().toString())
+          .increment();
+    }
+    endpointRepository.save(endpoint);
+
+    boolean canRetry = retryPolicy.canRetry(httpStatus, exception);
+
+    if (!canRetry) {
+      job.setStatus(DeliveryStatus.FAILED);
+      log.warn(
+          "Job {} failed with non-retryable error (Status: {}, Error: {}). Marking as FAILED.",
+          job.getId(),
+          httpStatus,
+          exception != null ? exception.getMessage() : "Unknown");
+      jobRepository.save(job);
+      meterRegistry.counter("webhook.delivery.permanent_failure").increment();
+      return;
     }
 
-    @Observed(name = "webhook.delivery.attempt", contextualName = "execute-delivery")
-    private void executeDelivery(DeliveryJobEntity job, WebhookEndpointEntity endpoint, OutboxEventEntity event) {
-        long start = System.currentTimeMillis();
-        int attemptNo = job.getAttemptCount() + 1;
-        
-        job.setAttemptCount(attemptNo);
-        
-        Integer httpStatus = null;
-        String errorType = null;
-        String responseSnippet = null;
-        boolean success = false;
-        Throwable exception = null;
+    meterRegistry.counter("webhook.delivery.retry").increment();
 
-        try {
-            long timestamp = System.currentTimeMillis();
-            String payload = event.getPayloadJson();
-            String signature = HmacUtils.sign(timestamp + "." + payload, endpoint.getSecret());
+    if (job.getAttemptCount() >= endpoint.getMaxAttempts()) {
+      job.setStatus(DeliveryStatus.DLQ);
+      log.warn(
+          "Job {} failed after {} attempts. Moving to DLQ.", job.getId(), job.getAttemptCount());
 
-            ResponseEntity<String> response = restClient.post()
-                    .uri(endpoint.getUrl())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("X-Webhook-Event", event.getEventType())
-                    .header("X-Webhook-Id", event.getId().toString())
-                    .header("X-Webhook-Timestamp", String.valueOf(timestamp))
-                    .header("X-Webhook-Signature", signature)
-                    .header("User-Agent", "WebhookPlatform/1.0")
-                    .body(payload)
-                    .retrieve()
-                    .toEntity(String.class);
+      DeadLetterEntity deadLetter =
+          DeadLetterEntity.builder()
+              .deliveryJobId(job.getId())
+              .reason(
+                  "Max attempts reached: "
+                      + job.getAttemptCount()
+                      + ". Last error: "
+                      + (httpStatus != null ? httpStatus : exception))
+              .build();
+      deadLetterRepository.save(deadLetter);
+      meterRegistry.counter("webhook.dlq.events").increment();
 
-            httpStatus = response.getStatusCode().value();
-            responseSnippet = response.getBody();
-            if (responseSnippet != null && responseSnippet.length() > 200) {
-                responseSnippet = responseSnippet.substring(0, 200);
-            }
-
-            if (response.getStatusCode().is2xxSuccessful()) {
-                success = true;
-            } else {
-                errorType = retryPolicy.determineErrorType(httpStatus, null);
-            }
-
-        } catch (Exception e) {
-            exception = e;
-            errorType = retryPolicy.determineErrorType(null, e);
-            responseSnippet = e.getMessage();
-            if (responseSnippet != null && responseSnippet.length() > 200) {
-                responseSnippet = responseSnippet.substring(0, 200);
-            }
-        } finally {
-            long duration = System.currentTimeMillis() - start;
-            
-            Timer.builder("webhook.delivery.latency")
-                    .tag("status", success ? "success" : "failure")
-                    .tag("error", errorType != null ? errorType : "none")
-                    .register(meterRegistry)
-                    .record(duration, TimeUnit.MILLISECONDS);
-
-            if (success) {
-                meterRegistry.counter("webhook.delivery.success").increment();
-            } else {
-                meterRegistry.counter("webhook.delivery.failure", "reason", errorType).increment();
-            }
-
-            DeliveryAttemptEntity attempt = DeliveryAttemptEntity.builder()
-                    .deliveryJobId(job.getId())
-                    .attemptNo(attemptNo)
-                    .httpStatus(httpStatus)
-                    .errorType(errorType)
-                    .durationMs(duration)
-                    .responseSnippet(responseSnippet)
-                    .build();
-            attemptRepository.save(attempt);
-
-            if (success) {
-                // Reset Circuit Breaker on success to restore normal traffic flow.
-                if (endpoint.getConsecutiveFailures() > 0) {
-                    endpoint.setConsecutiveFailures(0);
-                    endpoint.setNextAvailableAt(null);
-                    endpoint.setFailureReason(null);
-                    endpointRepository.save(endpoint);
-                }
-
-                job.setStatus(DeliveryStatus.SUCCEEDED);
-                jobRepository.save(job);
-                
-                DeliveredDedupeEntity dedupe = DeliveredDedupeEntity.builder()
-                        .id(new DeliveredDedupeId(endpoint.getId(), event.getId()))
-                        .build();
-                dedupeRepository.save(dedupe);
-                
-                log.info("Delivery success for job {}", job.getId());
-            } else {
-                handleFailure(job, endpoint, httpStatus, exception);
-            }
-        }
+    } else {
+      // Calculate Next Attempt with Policy
+      long delaySeconds = retryPolicy.calculateDelaySeconds(job.getAttemptCount());
+      job.setNextAttemptAt(LocalDateTime.now().plusSeconds(delaySeconds));
+      job.setStatus(DeliveryStatus.PENDING); // Will be picked up by a retry poller
+      log.info(
+          "Job {} scheduled for retry at {} (Delay: {}s)",
+          job.getId(),
+          job.getNextAttemptAt(),
+          delaySeconds);
     }
+    jobRepository.save(job);
+  }
 
-    private void handleFailure(DeliveryJobEntity job, WebhookEndpointEntity endpoint, Integer httpStatus, Throwable exception) {
-        // Increment Circuit Breaker Failures
-        int failures = endpoint.getConsecutiveFailures() + 1;
-        endpoint.setConsecutiveFailures(failures);
-        
-        if (failures >= endpoint.getCircuitBreakerThreshold()) {
-            LocalDateTime pausedUntil = LocalDateTime.now().plusMinutes(5);
-            endpoint.setNextAvailableAt(pausedUntil);
-            endpoint.setFailureReason("Circuit Breaker Open: " + failures + " consecutive failures. Last error: " + (httpStatus != null ? httpStatus : exception));
-            log.error("Circuit Breaker OPEN for endpoint {}. Paused until {}", endpoint.getId(), pausedUntil);
-            meterRegistry.counter("webhook.circuit_breaker.open", "endpoint", endpoint.getId().toString()).increment();
-        }
-        endpointRepository.save(endpoint);
+  public void retryJob(java.util.UUID jobId) {
+    DeliveryJobEntity job =
+        jobRepository
+            .findById(jobId)
+            .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
 
-        boolean canRetry = retryPolicy.canRetry(httpStatus, exception);
-        
-        if (!canRetry) {
-            job.setStatus(DeliveryStatus.FAILED);
-            log.warn("Job {} failed with non-retryable error (Status: {}, Error: {}). Marking as FAILED.", 
-                    job.getId(), httpStatus, exception != null ? exception.getMessage() : "Unknown");
-            jobRepository.save(job);
-            meterRegistry.counter("webhook.delivery.permanent_failure").increment();
-            return;
-        }
+    WebhookEndpointEntity endpoint =
+        endpointRepository
+            .findById(job.getEndpointId())
+            .orElseThrow(() -> new IllegalStateException("Endpoint not found for job " + jobId));
 
-        meterRegistry.counter("webhook.delivery.retry").increment();
+    OutboxEventEntity event =
+        eventRepository
+            .findById(job.getOutboxEventId())
+            .orElseThrow(() -> new IllegalStateException("Event not found for job " + jobId));
 
-        if (job.getAttemptCount() >= endpoint.getMaxAttempts()) {
-            job.setStatus(DeliveryStatus.DLQ);
-            log.warn("Job {} failed after {} attempts. Moving to DLQ.", job.getId(), job.getAttemptCount());
-            
-            DeadLetterEntity deadLetter = DeadLetterEntity.builder()
-                    .deliveryJobId(job.getId())
-                    .reason("Max attempts reached: " + job.getAttemptCount() + ". Last error: " + (httpStatus != null ? httpStatus : exception))
-                    .build();
-            deadLetterRepository.save(deadLetter);
-            meterRegistry.counter("webhook.dlq.events").increment();
-            
-        } else {
-            // Calculate Next Attempt with Policy
-            long delaySeconds = retryPolicy.calculateDelaySeconds(job.getAttemptCount());
-            job.setNextAttemptAt(LocalDateTime.now().plusSeconds(delaySeconds));
-            job.setStatus(DeliveryStatus.PENDING); // Will be picked up by a retry poller
-            log.info("Job {} scheduled for retry at {} (Delay: {}s)", job.getId(), job.getNextAttemptAt(), delaySeconds);
-        }
-        jobRepository.save(job);
-    }
-
-    public void retryJob(java.util.UUID jobId) {
-        DeliveryJobEntity job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
-
-        WebhookEndpointEntity endpoint = endpointRepository.findById(job.getEndpointId())
-                .orElseThrow(() -> new IllegalStateException("Endpoint not found for job " + jobId));
-
-        OutboxEventEntity event = eventRepository.findById(job.getOutboxEventId())
-                .orElseThrow(() -> new IllegalStateException("Event not found for job " + jobId));
-
-        executeDelivery(job, endpoint, event);
-    }
+    executeDelivery(job, endpoint, event);
+  }
 }

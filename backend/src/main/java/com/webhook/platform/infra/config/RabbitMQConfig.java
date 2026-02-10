@@ -11,48 +11,71 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RabbitMQConfig {
 
-    public static final String EXCHANGE_NAME = "webhook.events.exchange";
-    public static final String QUEUE_NAME = "webhook.events.queue";
-    public static final String ROUTING_KEY = "webhook.event.created";
+  public static final String EXCHANGE_NAME = "webhook.events.exchange";
+  public static final String QUEUE_NAME = "webhook.events.queue";
+  public static final String ROUTING_KEY = "webhook.event.created";
 
-    public static final String RETRY_QUEUE_NAME = "webhook.jobs.retry.queue";
-    public static final String RETRY_ROUTING_KEY = "webhook.job.retry";
+  // Dead Letter Exchange Configuration
+  public static final String DLQ_EXCHANGE_NAME = "webhook.events.dlx";
+  public static final String DLQ_QUEUE_NAME = "webhook.events.dlq";
+  public static final String DLQ_ROUTING_KEY = "webhook.event.dlq";
 
-    @Bean
-    public TopicExchange exchange() {
-        // Topic Exchange allows flexible routing based on wildcards (e.g., webhook.events.*).
-        return new TopicExchange(EXCHANGE_NAME);
-    }
+  public static final String RETRY_QUEUE_NAME = "webhook.jobs.retry.queue";
+  public static final String RETRY_ROUTING_KEY = "webhook.job.retry";
 
-    @Bean
-    public Queue queue() {
-        return QueueBuilder.durable(QUEUE_NAME).build();
-    }
+  @Bean
+  public TopicExchange exchange() {
+    // Topic Exchange allows flexible routing based on wildcards (e.g., webhook.events.*).
+    return new TopicExchange(EXCHANGE_NAME);
+  }
 
-    @Bean
-    public Queue retryQueue() {
-        return QueueBuilder.durable(RETRY_QUEUE_NAME).build();
-    }
+  @Bean
+  public TopicExchange dlqExchange() {
+    return new TopicExchange(DLQ_EXCHANGE_NAME);
+  }
 
-    @Bean
-    public Binding binding(Queue queue, TopicExchange exchange) {
-        return BindingBuilder.bind(queue).to(exchange).with(ROUTING_KEY);
-    }
+  @Bean
+  public Queue queue() {
+    return QueueBuilder.durable(QUEUE_NAME)
+        .withArgument("x-dead-letter-exchange", DLQ_EXCHANGE_NAME)
+        .withArgument("x-dead-letter-routing-key", DLQ_ROUTING_KEY)
+        .build();
+  }
 
-    @Bean
-    public Binding retryBinding(Queue retryQueue, TopicExchange exchange) {
-        return BindingBuilder.bind(retryQueue).to(exchange).with(RETRY_ROUTING_KEY);
-    }
+  @Bean
+  public Queue dlq() {
+    return QueueBuilder.durable(DLQ_QUEUE_NAME).build();
+  }
 
-    @Bean
-    public MessageConverter jsonMessageConverter() {
-        return new Jackson2JsonMessageConverter();
-    }
+  @Bean
+  public Queue retryQueue() {
+    return QueueBuilder.durable(RETRY_QUEUE_NAME).build();
+  }
 
-    @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
-        RabbitTemplate template = new RabbitTemplate(connectionFactory);
-        template.setMessageConverter(jsonMessageConverter());
-        return template;
-    }
+  @Bean
+  public Binding binding(Queue queue, TopicExchange exchange) {
+    return BindingBuilder.bind(queue).to(exchange).with(ROUTING_KEY);
+  }
+
+  @Bean
+  public Binding dlqBinding(Queue dlq, TopicExchange dlqExchange) {
+    return BindingBuilder.bind(dlq).to(dlqExchange).with(DLQ_ROUTING_KEY);
+  }
+
+  @Bean
+  public Binding retryBinding(Queue retryQueue, TopicExchange exchange) {
+    return BindingBuilder.bind(retryQueue).to(exchange).with(RETRY_ROUTING_KEY);
+  }
+
+  @Bean
+  public MessageConverter jsonMessageConverter() {
+    return new Jackson2JsonMessageConverter();
+  }
+
+  @Bean
+  public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+    RabbitTemplate template = new RabbitTemplate(connectionFactory);
+    template.setMessageConverter(jsonMessageConverter());
+    return template;
+  }
 }
